@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CrowdPulse · Manual Tally</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='3' fill='%234FA8D8'/%3E%3Ccircle cx='12' cy='12' r='8' stroke='%234FA8D8' stroke-width='1.6' fill='none' opacity='0.55'/%3E%3Ccircle cx='12' cy='12' r='11' stroke='%234FA8D8' stroke-width='1.2' fill='none' opacity='0.3'/%3E%3C/svg%3E">
+<style>
+  :root{ --bg:#0B0F14; --panel:#121821; --panel-2:#171F2A; --border:#26303C; --text:#E7ECF1; --muted:#7C8898; --signal:#4FA8D8; --safe:#3FAE72; --critical:#E0483E; }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  html,body{ height:100%; }
+  body{ background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif; display:flex; flex-direction:column; }
+  .topbar{ padding:14px 16px; border-bottom:1px solid var(--border); background:var(--panel); font-size:13px; font-weight:600; }
+  .topbar span{ color:var(--muted); font-weight:400; }
+  .wrap{ flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:20px; gap:18px; }
+  select, input{ background:var(--panel-2); border:1px solid var(--border); color:var(--text); border-radius:6px; padding:12px 14px; font-size:15px; width:100%; max-width:340px; font-family:inherit; }
+  .count-display{ font-size:64px; font-weight:700; font-family:'SF Mono','JetBrains Mono',Consolas,Monaco,monospace; line-height:1; }
+  .count-label{ font-size:13px; color:var(--muted); text-align:center; }
+  .btn-row{ display:flex; gap:14px; width:100%; max-width:340px; }
+  button{
+    flex:1; font-family:inherit; font-size:22px; font-weight:700;
+    background:var(--panel-2); color:var(--text); border:1px solid var(--border);
+    border-radius:8px; padding:22px 0; cursor:pointer;
+  }
+  button:active{ background:#1D2733; }
+  button.plus{ color:var(--safe); border-color:#1D3527; }
+  button.minus{ color:var(--critical); border-color:#3A1D1B; }
+  .small-row{ display:flex; gap:10px; width:100%; max-width:340px; }
+  .small-row button{ padding:12px 0; font-size:14px; }
+  .status-line{ font-size:12px; color:var(--muted); text-align:center; min-height:16px; }
+  .status-line.error{ color:var(--critical); }
+  .status-line.ok{ color:var(--safe); }
+  .setup{ display:flex; flex-direction:column; gap:14px; align-items:center; width:100%; }
+  .hint{ font-size:11.5px; color:var(--muted); text-align:center; max-width:320px; line-height:1.5; }
+</style>
+</head>
+<body>
+  <div class="topbar">CrowdPulse <span>· Manual Tally (real headcount, zero tech required)</span></div>
+  <div class="wrap" id="setupView">
+    <div class="setup">
+      <div class="hint">Pick the zone you're standing at. Tap +1 when someone enters, -1 when someone leaves. This sends a real reading to the dashboard immediately, no camera or sensor needed.</div>
+      <select id="zoneSelect"><option value="">Loading zones...</option></select>
+      <button id="startBtn" style="max-width:340px; padding:16px 0; font-size:16px;">Start counting this zone</button>
+      <div class="status-line" id="setupStatus"></div>
+    </div>
+  </div>
+  <div class="wrap" id="counterView" style="display:none;">
+    <div class="count-label" id="zoneNameLabel">Zone</div>
+    <div class="count-display" id="countDisplay">0</div>
+    <div class="btn-row">
+      <button class="minus" id="minusBtn">&minus; 1</button>
+      <button class="plus" id="plusBtn">+ 1</button>
+    </div>
+    <div class="small-row">
+      <button id="minus5Btn">&minus; 5</button>
+      <button id="plus5Btn">+ 5</button>
+    </div>
+    <div class="status-line" id="syncStatus"></div>
+    <button id="switchZoneBtn" style="max-width:340px; margin-top:10px; font-size:13px; padding:10px 0;">Switch zone</button>
+  </div>
+
+<script>
+const API = ''; // same origin: open this page from the backend's own address, e.g. http://<laptop-ip>:4000/manual-counter.html
+let currentZone = null;
+let count = 0;
+let pending = false;
+
+async function loadZones(){
+  const select = document.getElementById('zoneSelect');
+  try{
+    const zones = await fetch(API+'/api/zones').then(r=>r.json());
+    select.innerHTML = zones.map(z=>`<option value="${z.id}" data-cap="${z.cap}" data-count="${z.count}">${z.name} (Zone ${z.id})</option>`).join('');
+  } catch(err){
+    document.getElementById('setupStatus').textContent = 'Could not reach the backend. Check you are on the same WiFi and the address is correct.';
+    document.getElementById('setupStatus').className = 'status-line error';
+  }
+}
+loadZones();
+
+document.getElementById('startBtn').addEventListener('click', ()=>{
+  const select = document.getElementById('zoneSelect');
+  const opt = select.options[select.selectedIndex];
+  if(!opt || !opt.value) return;
+  currentZone = opt.value;
+  count = parseInt(opt.dataset.count || '0', 10) || 0;
+  document.getElementById('zoneNameLabel').textContent = opt.textContent;
+  document.getElementById('countDisplay').textContent = count;
+  document.getElementById('setupView').style.display = 'none';
+  document.getElementById('counterView').style.display = 'flex';
+  document.getElementById('counterView').style.flexDirection = 'column';
+});
+
+document.getElementById('switchZoneBtn').addEventListener('click', ()=>{
+  document.getElementById('counterView').style.display = 'none';
+  document.getElementById('setupView').style.display = 'flex';
+  loadZones();
+});
+
+async function sendCount(){
+  if(pending) return;
+  pending = true;
+  const statusEl = document.getElementById('syncStatus');
+  try{
+    await fetch(API+'/api/sensor-ping', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ zoneId: currentZone, count, source:'manual-tally' })
+    });
+    statusEl.textContent = 'Synced';
+    statusEl.className = 'status-line ok';
+  } catch(err){
+    statusEl.textContent = 'Could not sync, will retry on next tap';
+    statusEl.className = 'status-line error';
+  }
+  pending = false;
+}
+
+function adjust(n){
+  count = Math.max(0, count + n);
+  document.getElementById('countDisplay').textContent = count;
+  sendCount();
+}
+
+document.getElementById('plusBtn').addEventListener('click', ()=>adjust(1));
+document.getElementById('minusBtn').addEventListener('click', ()=>adjust(-1));
+document.getElementById('plus5Btn').addEventListener('click', ()=>adjust(5));
+document.getElementById('minus5Btn').addEventListener('click', ()=>adjust(-5));
+</script>
+</body>
+</html>
