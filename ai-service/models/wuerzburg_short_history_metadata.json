@@ -1,0 +1,48 @@
+{
+  "version": "2.2.0",
+  "target": "next-hour surge",
+  "threshold": 403.0,
+  "history_length": 12,
+  "features": [
+    "n_pedestrians",
+    "n_pedestrians_towards",
+    "n_pedestrians_away",
+    "towards_ratio",
+    "away_ratio",
+    "incidents",
+    "lag_1",
+    "lag_2",
+    "lag_3",
+    "lag_4",
+    "lag_5",
+    "lag_6",
+    "lag_7",
+    "lag_8",
+    "lag_9",
+    "lag_10",
+    "lag_11",
+    "lag_12",
+    "delta_1",
+    "delta_2",
+    "delta_3"
+  ],
+  "split": {
+    "train_end": "2023-01-27T00:00:00.000000000",
+    "validation_end": "2023-11-22T00:00:00.000000000",
+    "test_start": "2023-11-22T00:00:00.000000000"
+  },
+  "validation": {
+    "roc_auc": 0.9679683313908773,
+    "pr_auc": 0.7572221273525565,
+    "precision": 0.44220607661822986,
+    "recall": 0.905341446923597,
+    "f1": 0.5941868205014422
+  },
+  "test": {
+    "roc_auc": 0.9705559322160641,
+    "pr_auc": 0.7770692423391105,
+    "precision": 0.49501546923341355,
+    "recall": 0.8933002481389578,
+    "f1": 0.6370272063702721
+  }
+}

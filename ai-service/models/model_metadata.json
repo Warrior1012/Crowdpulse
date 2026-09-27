@@ -1,0 +1,67 @@
+{
+  "model": "XGBoost",
+  "version": "1.0.0",
+  "target": "next-hour n_pedestrians within same street",
+  "dataset": "W\u00fcrzburg Foot Traffic",
+  "source": "https://www.kaggle.com/competitions/foot-traffic-wue/data",
+  "split": {
+    "train_end": "2023-01-28T00:00:00.000000000",
+    "validation_end": "2023-11-22T00:00:00.000000000",
+    "test_start": "2023-11-22T00:00:00.000000000"
+  },
+  "validation": {
+    "MAE": 68.30150804216588,
+    "RMSE": 122.42010278227515,
+    "R2": 0.9827842696631044,
+    "sMAPE": 18.55119115576407
+  },
+  "test": {
+    "MAE": 72.79143738767691,
+    "RMSE": 126.08468640664142,
+    "R2": 0.9833996827240392,
+    "sMAPE": 19.191791329626525
+  },
+  "naive_current_count_test": {
+    "MAE": 195.694219868042,
+    "RMSE": 303.7227964416541,
+    "R2": 0.9036733441742908,
+    "sMAPE": 44.141008437696335
+  },
+  "features": [
+    "streetname",
+    "hour",
+    "dow_num",
+    "month",
+    "temperature",
+    "weather_condition",
+    "incidents",
+    "collection_type",
+    "n_pedestrians",
+    "n_pedestrians_towards",
+    "n_pedestrians_away",
+    "towards_ratio",
+    "away_ratio",
+    "hour_sin",
+    "hour_cos",
+    "dayofyear_sin",
+    "dayofyear_cos",
+    "ped_lag_1",
+    "ped_lag_2",
+    "ped_lag_3",
+    "ped_lag_24",
+    "ped_lag_48",
+    "ped_lag_168",
+    "ped_roll_mean_3",
+    "ped_roll_mean_6",
+    "ped_roll_mean_24",
+    "ped_roll_mean_168",
+    "ped_roll_std_3",
+    "ped_roll_std_6",
+    "ped_roll_std_24",
+    "ped_roll_std_168"
+  ],
+  "limitations": [
+    "Forecasts pedestrian flow, not emergency probability.",
+    "W\u00fcrzburg street-counter data is not equivalent to venue-camera occupancy."
+  ]
+}

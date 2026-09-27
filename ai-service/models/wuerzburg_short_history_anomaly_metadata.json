@@ -1,0 +1,32 @@
+{
+  "version": "2.2.0",
+  "features": [
+    "n_pedestrians",
+    "n_pedestrians_towards",
+    "n_pedestrians_away",
+    "towards_ratio",
+    "away_ratio",
+    "lag_1",
+    "lag_2",
+    "lag_3",
+    "lag_4",
+    "lag_5",
+    "lag_6",
+    "lag_7",
+    "lag_8",
+    "lag_9",
+    "lag_10",
+    "lag_11",
+    "lag_12",
+    "delta_1",
+    "delta_2",
+    "delta_3"
+  ],
+  "calibration": {
+    "p01": -0.13432822228610036,
+    "p05": -0.05268755124597708,
+    "p50": 0.0741524137545479,
+    "p95": 0.12884798459028257,
+    "p99": 0.13401155196852838
+  }
+}

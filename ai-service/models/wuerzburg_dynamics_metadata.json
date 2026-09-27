@@ -1,0 +1,80 @@
+{
+  "version": "2.0.0",
+  "target": "next-hour crowd surge (derived from measured data; not emergency/stampede ground truth)",
+  "dataset": "W\u00fcrzburg Foot Traffic",
+  "surge_threshold_abs_delta_90pct_train": 665.0,
+  "split": {
+    "train_end": "2023-01-28T00:00:00.000000000",
+    "validation_end": "2023-11-22T00:00:00.000000000",
+    "test_start": "2023-11-22T00:00:00.000000000"
+  },
+  "model_selection": {
+    "xgb": {
+      "validation": {
+        "ROC_AUC": 0.97838113296437,
+        "PR_AUC": 0.722798696254752,
+        "precision": 0.4012738853503185,
+        "recall": 0.860655737704918,
+        "f1": 0.5473501303214596,
+        "positive_rate": 0.017060550971892043
+      },
+      "test": {
+        "ROC_AUC": 0.9857204767531111,
+        "PR_AUC": 0.7683223658879068,
+        "precision": 0.45,
+        "recall": 0.8590909090909091,
+        "f1": 0.590625,
+        "positive_rate": 0.02044419663600037
+      }
+    }
+  },
+  "features": [
+    "streetname",
+    "hour",
+    "dow_num",
+    "month",
+    "temperature",
+    "weather_condition",
+    "incidents",
+    "collection_type",
+    "n_pedestrians",
+    "n_pedestrians_towards",
+    "n_pedestrians_away",
+    "towards_ratio",
+    "away_ratio",
+    "net_flow",
+    "hour_sin",
+    "hour_cos",
+    "dayofyear_sin",
+    "dayofyear_cos",
+    "ped_lag_1",
+    "ped_lag_2",
+    "ped_lag_3",
+    "ped_lag_24",
+    "ped_lag_48",
+    "ped_lag_168",
+    "delta_1",
+    "delta_2",
+    "delta_3",
+    "roll_mean_3",
+    "roll_mean_6",
+    "roll_mean_24",
+    "roll_mean_168",
+    "roll_std_3",
+    "roll_std_6",
+    "roll_std_24",
+    "roll_std_168"
+  ],
+  "anomaly_calibration": {
+    "p01": -0.1165640622642105,
+    "p05": -0.04062752017373824,
+    "p50": 0.05213654240282223,
+    "p95": 0.10001597065381228,
+    "p99": 0.10829332844768548
+  },
+  "notes": [
+    "Surge label is a data-derived forecasting target, not a manually hardcoded danger label.",
+    "IsolationForest is fit only on normal training-period dynamics.",
+    "This model estimates rapid next-hour count increase, not emergency probability."
+  ]
+}
