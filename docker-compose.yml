@@ -1,0 +1,119 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: crowdpulse-redis
+    restart: unless-stopped
+    command: >-
+      sh -c 'redis-server --appendonly yes --port 0 --tls-port 6379
+      --tls-cert-file /tls/redis.crt --tls-key-file /tls/redis.key
+      --tls-ca-cert-file /tls/ca.crt --tls-auth-clients no
+      --requirepass "$$REDIS_PASSWORD"'
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-change-this-redis-password}
+    volumes:
+      - crowdpulse_redisdata:/data
+      - ./redis-certs:/tls:ro
+    healthcheck:
+      test: ["CMD-SHELL", 'redis-cli --tls --cacert /tls/ca.crt -a "$$REDIS_PASSWORD" ping | grep -q PONG']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: crowdpulse-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-crowdpulse}
+      POSTGRES_USER: ${POSTGRES_USER:-crowdpulse}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-crowdpulse}
+    ports:
+      - "5432:5432"
+    volumes:
+      - crowdpulse_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-crowdpulse} -d ${POSTGRES_DB:-crowdpulse}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  ai-service:
+    build:
+      context: ./ai-service
+      dockerfile: Dockerfile
+    container_name: crowdpulse-ai
+    restart: unless-stopped
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=2).read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: crowdpulse-app
+    restart: unless-stopped
+    environment:
+      PORT: 4000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-crowdpulse}:${POSTGRES_PASSWORD:-crowdpulse}@postgres:5432/${POSTGRES_DB:-crowdpulse}
+      REDIS_URL: rediss://redis:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-change-this-redis-password}
+      REDIS_TLS: "true"
+      REDIS_TLS_CA: /app/redis-certs/ca.crt
+      REDIS_TLS_SERVERNAME: redis
+      REDIS_TLS_REJECT_UNAUTHORIZED: "true"
+      REDIS_CHANNEL: crowdpulse:events
+      DB_POOL_MAX: 10
+      DB_SSL: "false"
+      SESSION_ID: ${SESSION_ID:-demo-session}
+      JWT_SECRET: ${JWT_SECRET:-replace-this-in-production-with-a-long-random-secret}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-8h}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-crowdpulse-admin}
+      OPERATOR_USERNAME: ${OPERATOR_USERNAME:-operator}
+      OPERATOR_PASSWORD: ${OPERATOR_PASSWORD:-crowdpulse-operator}
+      SENSOR_USERNAME: ${SENSOR_USERNAME:-sensor}
+      SENSOR_PASSWORD: ${SENSOR_PASSWORD:-crowdpulse-sensor}
+      ADMIN_KEY: ${ADMIN_KEY:-demo-admin-key}
+      WEBHOOK_URL: ${WEBHOOK_URL:-}
+      AI_SERVICE_URL: http://ai-service:8000
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      GEMINI_TIMEOUT_MS: ${GEMINI_TIMEOUT_MS:-7000}
+      SENSOR_INTERVAL_SECONDS: ${SENSOR_INTERVAL_SECONDS:-2}
+    ports:
+      - "4000:4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ai-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:4000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  simulator:
+    build:
+      context: .
+      dockerfile: Dockerfile.simulator
+    container_name: crowdpulse-simulator
+    restart: unless-stopped
+    environment:
+      BACKEND_URL: http://app:4000
+      SENSOR_USERNAME: ${SENSOR_USERNAME:-sensor}
+      SENSOR_PASSWORD: ${SENSOR_PASSWORD:-crowdpulse-sensor}
+    depends_on:
+      app:
+        condition: service_healthy
+
+volumes:
+  crowdpulse_pgdata:
+  crowdpulse_redisdata:

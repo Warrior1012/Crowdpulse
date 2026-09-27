@@ -1,0 +1,129 @@
+// Attendee taps "I feel unsafe". Real signal, corroborated against other
+// reports in the same zone. See recordPanicReport() for why this matters.
+app.post('/api/panic-report', requireAuth, requireRole('attendee','admin','operator'), rateLimit(10, 10000), (req, res) => {
+  const { lat, lng, clientId } = req.body;
+  if (typeof lat !== 'number' || typeof lng !== 'number') {
+    return res.status(400).json({ error: 'lat and lng must be numbers' });
+  }
+  const result = recordPanicReport(lat, lng, clientId);
+  const panicZone = findZoneForPoint(lat, lng);
+  void db.insertPanicReport({ sessionId: SESSION_ID, clientId: clientId || 'anon', zoneId: panicZone ? panicZone.id : null, lat, lng, ts: timeNow() }).catch(err => console.error('DB panic insert failed:', err.message));
+  res.json({ ok: true, ...result });
+});
+
+app.post('/api/incident-report', requireAuth, requireRole('attendee','admin','operator'), rateLimit(10, 60000), async (req, res) => {
+  try {
+    const {
+      reporterName,
+      reporterRole,
+      contact,
+      latitude,
+      longitude,
+      zoneId,
+      zoneName,
+      description,
+      transcript,
+      imageDataUrl,
+      imageName,
+      audioDataUrl,
+      audioName,
+      voiceLanguage,
+      timestamp,
+    } = req.body || {};
+
+    if (typeof latitude !== 'number' || typeof longitude !== 'number') {
+      return res.status(400).json({ error: 'latitude and longitude must be numbers' });
+    }
+
+    const summaryText = [description || '', transcript || ''].filter(Boolean).join(' ');
+    if (!summaryText.trim()) {
+      return res.status(400).json({ error: 'Please provide a short incident description or voice transcript.' });
+    }
+
+    const reportId = `IR-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const payload = {
+      id: reportId,
+      reporterName: reporterName || 'Attendee',
+      reporterRole: reporterRole || 'attendee',
+      contact: contact || undefined,
+      latitude,
+      longitude,
+      zoneId: zoneId || null,
+      zoneName: zoneName || null,
+      description: description || '',
+      transcript: transcript || '',
+      imageDataUrl: imageDataUrl || undefined,
+      imageName: imageName || 'incident-photo',
+      audioDataUrl: audioDataUrl || undefined,
+      audioName: audioName || 'incident-audio',
+      voiceLanguage: voiceLanguage || 'en-IN',
+      timestamp: timestamp || new Date().toISOString(),
+    };
+
+    const assessment = await assessIncidentReport(payload);
+    const incident = {
+      id: reportId,
+      type: 'incident_report',
+      ts: payload.timestamp,
+      message: `AI assistive incident report classified as ${assessment.severity}: ${assessment.rationale}`,
+      zoneId: payload.zoneId || null,
+      zoneName: payload.zoneName || null,
+      reporterName: payload.reporterName,
+      reporterRole: payload.reporterRole,
+      severity: assessment.severity,
+      assistiveAssessment: true,
+      assessment,
+      payload,
+    };
+
+    try {
+      await db.insertAttendeeReport({
+        id: reportId,
+        sessionId: SESSION_ID,
+        reporterName: payload.reporterName || 'Attendee',
+        reporterRole: payload.reporterRole || 'attendee',
+        contact: payload.contact || null,
+        latitude: payload.latitude,
+        longitude: payload.longitude,
+        zoneId: payload.zoneId || null,
+        zoneName: payload.zoneName || null,
+        description: payload.description || '',
+        transcript: payload.transcript || '',
+        voiceLanguage: payload.voiceLanguage || 'en-IN',
+        imageDataUrl: payload.imageDataUrl || null,
+        audioDataUrl: payload.audioDataUrl || null,
+        imageName: payload.imageName || 'incident-photo',
+        audioName: payload.audioName || 'incident-audio',
+        assessment,
+        timestamp: payload.timestamp || new Date().toISOString(),
+      });
+    } catch (dbErr) {
+      console.error('Attendee report DB persistence failed:', dbErr.message);
+    }
+
+    logIncident(incident);
+    void publishEvent('incident_report', incident);
+
+    return res.json({
+      ok: true,
+      reportId,
+      severity: assessment.severity,
+      assessment,
+      submittedAt: payload.timestamp,
+    });
+  } catch (err) {
+    console.error('Incident report submission failed:', err);
+    return res.status(500).json({ error: err.message || 'Incident report classification failed.' });
+  }
+});
+
+app.post('/api/camera/injury-detect', requireAuth, requireRole('admin','operator','sensor'), rateLimit(10, 60000), async (req, res) => {
+  try {
+    const {
+      lat,
+      lng,
+      zoneId,
+      zoneName,
+      personCount = 1,
+      confidence = 0.75,
+      posture = 'unknown',

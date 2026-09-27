@@ -1,0 +1,7 @@
+FROM node:20-alpine
+WORKDIR /app
+COPY backend/package*.json ./
+RUN npm install --omit=dev
+COPY backend/config.js ./config.js
+COPY backend/simulator.js ./simulator.js
+CMD ["node", "simulator.js"]

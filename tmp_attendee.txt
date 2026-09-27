@@ -1,0 +1,41 @@
+                      ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-3.5 border-t border-cp-border px-4 py-2.5 text-[11px] text-cp-muted">
+            <Legend color="bg-cp-safe" label="Normal" />
+            <Legend color="bg-cp-caution" label="Elevated" />
+            <Legend color="bg-cp-critical" label="Critical, dispatch triggered" />
+            <Legend color="bg-cp-signal" label="Responder unit" />
+          </div>
+          <div className="px-4 pb-2.5 text-[11px] text-cp-dim">Flow bottleneck: predicted congestion forming between two adjacent zones, flagged before either zone individually crosses its own threshold.</div>
+
+          <div className="border-t border-cp-border px-4 py-3">
+            <div className="mb-2 flex items-center justify-between">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-cp-muted">Uploaded people</div>
+              <div className="text-[10px] text-cp-dim">{uploadedReports.length} records</div>
+            </div>
+            <div className="space-y-2">
+              {uploadedReports.length === 0 ? (
+                <div className="rounded border border-dashed border-cp-border bg-cp-panel2 p-2 text-[11px] text-cp-dim">No attendee uploads yet.</div>
+              ) : (
+                uploadedReports.slice(0, 6).map((report) => (
+                  <div key={report.id} className="rounded border border-cp-border bg-cp-panel2 p-2">
+                    <div className="mb-1 flex items-center gap-2">
+                      {report.imageDataUrl ? (
+                        <img src={report.imageDataUrl} alt={report.imageName || report.reporterName} className="h-10 w-10 rounded object-cover" />
+                      ) : (
+                        <div className="flex h-10 w-10 items-center justify-center rounded bg-cp-panel text-[10px] text-cp-muted">IMG</div>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-[11px] font-semibold text-cp-text">{report.reporterName}</div>
+                        <div className="truncate text-[10px] text-cp-muted">{report.zoneName || 'Unknown zone'} · {report.severity || 'Medium'}</div>
+                      </div>
+                    </div>
+                    <div className="text-[10px] text-cp-dim">
+                      {report.latitude.toFixed(5)}, {report.longitude.toFixed(5)}
+                    </div>
+                    <div className="mt-1 line-clamp-2 text-[10px] text-cp-muted">{report.description || report.transcript || 'Uploaded incident report'}</div>
+                  </div>
