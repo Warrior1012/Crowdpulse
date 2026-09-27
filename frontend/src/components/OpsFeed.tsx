@@ -1,0 +1,8 @@
+import { motion, AnimatePresence } from 'framer-motion';
+import { IncidentIcon, INCIDENT_META } from './IncidentIcon';
+import { localTimeFromISO } from '../api';
+import type { Incident } from '../models';
+export default function OpsFeed({incidents}:{incidents:Incident[]}) {
+ if(!incidents.length) return <div className="py-8 text-center text-xs text-cp-dim">Monitoring zones. Alerts will appear here in real time.</div>;
+ return <AnimatePresence initial={false}>{incidents.map((evt,i)=>{const meta=INCIDENT_META[evt.type]||INCIDENT_META.dispatch; const accent:Record<string,string>={critical:'border-l-2 border-l-cp-critical',dispatch:'border-l-2 border-l-cp-signal',resolved:'border-l-2 border-l-cp-safe opacity-60',predictive:'border-l-2 border-l-cp-caution',bottleneck:'border-l-2 border-dashed border-l-cp-critical',panic:'border-l-2 border-cp-caution opacity-85',panic_corroborated:'border-l-2 border-l-cp-critical',sms:'border-l-2 border-l-cp-dim'}; return <motion.div key={evt.id||`${evt.ts}-${evt.type}-${i}`} initial={{opacity:0,y:-8,filter:'blur(3px)'}} animate={{opacity:1,y:0,filter:'blur(0px)'}} exit={{opacity:0,x:20}} transition={{duration:.22}} className={`mb-2.5 rounded border border-cp-border bg-cp-panel2 p-3 ${accent[meta.cls]||accent.dispatch}`}><div className="mb-1 flex items-center justify-between gap-2 text-xs font-semibold"><span className="flex items-center gap-1.5"><IncidentIcon type={evt.type}/>{meta.label}{evt.zoneName?` · ${evt.zoneName}`:''}</span><span className="whitespace-nowrap font-mono text-[11px] font-normal text-cp-muted">{localTimeFromISO(evt.ts)}</span></div><div className="text-xs text-cp-muted">{evt.message}</div></motion.div>})}</AnimatePresence>;
+}
