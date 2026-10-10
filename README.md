@@ -43,13 +43,8 @@ CrowdPulse now persists its operational data in PostgreSQL instead of relying on
 - `attendees`: latest attendee location per client ID
 - `panic_reports`: individual panic reports used for corroboration
 
-Start PostgreSQL with Docker from the project root:
-
-```
-docker compose up -d postgres
-```
-
-Then configure the backend (copy `.env.example` to `.env` if needed):
+Install PostgreSQL locally, create the `crowdpulse` database, and configure
+the backend (copy `backend/.env.example` to `backend/.env` if needed):
 
 ```
 DATABASE_URL=postgresql://crowdpulse:crowdpulse@localhost:5432/crowdpulse
@@ -63,11 +58,11 @@ npm install
 npm run db:check
 ```
 
-The backend also exposes `/api/health`; it returns `database: "connected"` only when PostgreSQL responds successfully. The server refuses to start when the database cannot be initialized, so you cannot accidentally run a supposedly persistent demo against a missing database.
+The backend also exposes `/api/health`; it returns `database: "connected"` only when PostgreSQL responds successfully. If PostgreSQL is unavailable, the backend continues in in-memory fallback mode.
 
 The demo reset endpoint clears the current `SESSION_ID` from the database as well as the in-memory state.
 
-For production, replace the local Docker credentials with a managed PostgreSQL connection string and enable SSL.
+For production, use a managed PostgreSQL connection string and enable SSL.
 
 
 Optional: copy `backend/.env.example` to `backend/.env` to change the
@@ -191,7 +186,7 @@ strength, not a weakness)
 | SMS/USSD fallback channel | **Simulated and clearly labeled as such** in the UI ("SMS fallback (simulated)"). No real Twilio/SMS gateway wired up: that needs a paid account. A real webhook (Slack/Discord) notification does fire for real on critical/corroborated alerts if `WEBHOOK_URL` is set in `.env`: that's a genuine free channel, unlike SMS. |
 | IoT sensors | **Real options now available, simulator still included for quick testing.** `backend/camera-sensor.py` does real, free computer-vision people counting from any camera. `/manual-counter.html` (served by the backend, source in `frontend-react/public/`) is a real volunteer-operated tally. `simulator.js` remains for convenience when you just want to see the dashboard move without setting up either. See "Real sensing without buying any hardware" above. |
 | Attendee GPS | **Manual by default, with a real option.** A "Use my real device location" button calls the browser's actual `navigator.geolocation` API: a genuine permission prompt and real coordinates, not simulated. Manual lat/lng entry and map-click remain available too. |
-| Data persistence | Incidents are logged to `backend/data/incidents.log.jsonl` on disk. In-memory for live state. Good enough for a demo; swap for Postgres/Redis for production, as noted in the original pitch deck. |
+| Data persistence | Incidents are logged to `backend/data/incidents.log.jsonl` on disk. In-memory for live state. Good enough for a demo; use managed PostgreSQL for durable production storage. |
 | Network-loss resilience demo | **Real.** The "Simulate network loss" button actually disconnects the Socket.io connection; reconnecting actually flushes queued events to `/api/sync`. |
 
 ## The USP, in one line for judges
@@ -230,7 +225,7 @@ A few things judges are likely to ask about, and where things stand:
 | **Critical zones looked identical to a static screenshot** | Fixed. A critical zone now pulses subtly on the map so it reads as "live and urgent" rather than a static red rectangle. |
 | **No way to hand judges a take-away summary** | Fixed. The Analytics tab has an "Export as CSV" button that downloads the actual incident log from this session. |
 | **Nearest-responder dispatch uses straight-line distance** | Not fixed, flagged as a real gap. Haversine distance ignores walls, barricades, and actual walkable paths. A real deployment needs an indoor routing graph and pathfinding (Dijkstra/A*) over it. Say so directly if asked, don't claim this is solved. |
-| **Single Node process, in-memory state, won't scale to a real large event** | Not fixed, flagged as a real gap. This is demo-scale by design. The production architecture (microservices, Redis pub/sub, horizontal scaling of ingestion vs. alerting) is described in the original pitch deck but not implemented here. |
+| **Single Node process, in-memory state, won't scale to a real large event** | Not fixed, flagged as a real gap. This is demo-scale by design. Production can use a distributed event bus and independently scalable services. |
 | **SMS/USSD fallback is simulated** | Still simulated, honestly. But critical alerts and corroborated panic alerts now also fire a real webhook notification (Slack or Discord incoming-webhook format, auto-detected) if `WEBHOOK_URL` is set in `.env`. That's a genuine external channel we could wire up for free; a real SMS gateway needs a paid telecom API, which is why that specific piece stays simulated. |
 | **Attendee GPS is manual, not real device location** | Partially fixed. There's now a real "Use my real device location" button using the browser's actual `navigator.geolocation` API. Since the demo zones sit at fixed placeholder coordinates, your real device location will almost always land "outside all mapped zones" unless you're physically there. That's correct behavior; the geolocation call itself is genuine. |
 | **No health check, and no way to reset state between demo runs without restarting the server** | Fixed. `GET /api/health` reports uptime and whether a webhook is configured. `POST /api/reset-demo` (admin-gated) resets all zones, responders, and incidents to a fresh starting state without restarting the process, useful for running the demo back-to-back for multiple judges. |
@@ -335,33 +330,10 @@ The frontend stores the JWT only in `sessionStorage` and sends it as `Authorizat
 
 Set a strong `JWT_SECRET` in production. Do not expose the development credentials or `ADMIN_KEY` outside a local/demo environment.
 
-## Full Docker stack
+## Local services
 
-The root `docker-compose.yml` runs three services:
-
-1. `postgres`: PostgreSQL 16 with a persistent named volume
-2. `app`: Node/Express + Socket.IO + built React/Vite dashboard + JWT + PostgreSQL
-3. `simulator`: authenticated simulated IoT feed using the `sensor` JWT role
-
-Start everything:
-
-```bash
-docker compose up --build
-```
-
-Open `http://localhost:4000` and sign in with the demo admin account. The app container waits for the PostgreSQL health check before starting, and the simulator waits for the app health check.
-
-Check:
-
-```bash
-curl http://localhost:4000/api/health
-```
-
-The health endpoint intentionally remains public so Docker/Kubernetes health checks can verify the service without storing a JWT in the health probe.
-
-## Redis security
-
-Redis is configured for TLS and password authentication in Docker. The Redis port is intentionally not published to the host; only the CrowdPulse containers can reach it on the Docker network. The included certificate is a demo/self-signed CA for local use. Replace the demo Redis password and certificates with deployment-managed secrets/certificates before production.
+Run PostgreSQL, the AI service, and the backend directly on the host. Socket.IO
+broadcasts updates in-process to connected dashboard clients.
 
 ## Hybrid AI layer
 
@@ -371,13 +343,6 @@ CrowdPulse now includes a local ML service plus optional Gemini reasoning.
 - Local ML: `GradientBoostingClassifier` + `IsolationForest` in `ai-service/` for risk and anomaly scoring.
 - Venue-aware retrieval: PostgreSQL `venue_knowledge` table stores zone SOPs and operational constraints.
 - Gemini: optional reasoning/explanation layer. Set `GEMINI_API_KEY` in `.env`; raw frames are never sent to Gemini.
-- Redis Pub/Sub: distributes `aiAssessment` events to connected dashboards.
 - PostgreSQL: persists AI predictions and features for later evaluation/retraining.
-
-Run the complete stack:
-
-```bash
-docker compose up --build
-```
 
 Without a Gemini key the local AI still runs and the dashboard falls back to the local copilot.
