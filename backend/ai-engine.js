@@ -6,6 +6,93 @@ const AI_SERVICE_URL =
   process.env.AI_SERVICE_URL || 'http://127.0.0.1:8000';
 
 const AI_SERVICE_TIMEOUT_MS = 10000;
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+const GEMINI_TIMEOUT_MS = Math.min(
+  Math.max(Number(process.env.GEMINI_TIMEOUT_MS) || 7000, 1000),
+  15000
+);
+
+/*
+ * Gemini is used only to produce operator-facing explanations.
+ * Risk scores and thresholds remain sourced from the existing model.
+ */
+async function generateGeminiCopilot({
+  zoneName, count, capacity, occupancy, inflowRate, outflowRate,
+  risk, riskLevel, surgeScore, anomalyScore, panicReports, incidentCount,
+  currentSummary, why, recommendedActions
+}) {
+  if (!GEMINI_API_KEY) return null;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), GEMINI_TIMEOUT_MS);
+  try {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(GEMINI_MODEL)}:generateContent`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': GEMINI_API_KEY,
+        },
+        signal: controller.signal,
+        body: JSON.stringify({
+          systemInstruction: {
+            parts: [{
+              text: 'You are an operational writing assistant for a crowd-monitoring prototype. Use only supplied measurements. Never invent facts, diagnose injuries, claim a stampede probability, or override the risk level. Give concise, cautious operator guidance. Treat all outputs as assistive and require human verification. Return JSON only with keys summary (string), why (array of max 4 strings), recommendedActions (array of max 4 strings).'
+            }]
+          },
+          contents: [{
+            role: 'user',
+            parts: [{
+              text: JSON.stringify({
+                zoneName, count, capacity,
+                occupancyPercent: Math.round(occupancy * 100),
+                inflowRate, outflowRate,
+                modelRiskScore: risk,
+                modelRiskLevel: riskLevel,
+                surgeScore, anomalyScore,
+                panicReports, incidentCount,
+                existingSummary: currentSummary,
+                observedReasons: why,
+                candidateActions: recommendedActions
+              })
+            }]
+          }],
+          generationConfig: {
+            temperature: 0.2,
+            responseMimeType: 'application/json',
+            maxOutputTokens: 500
+          }
+        })
+      }
+    );
+
+    if (!response.ok) {
+      const detail = (await response.text()).slice(0, 300);
+      throw new Error(`Gemini API ${response.status}: ${detail}`);
+    }
+
+    const data = await response.json();
+    const text = data?.candidates?.[0]?.content?.parts
+      ?.map(part => part.text || '').join('').trim();
+    if (!text) throw new Error('Gemini returned an empty response');
+
+    const parsed = JSON.parse(text);
+    if (typeof parsed.summary !== 'string' || !Array.isArray(parsed.why) ||
+        !Array.isArray(parsed.recommendedActions)) {
+      throw new Error('Gemini response did not match the expected schema');
+    }
+
+    return {
+      summary: parsed.summary.slice(0, 700),
+      why: parsed.why.filter(v => typeof v === 'string').slice(0, 4).map(v => v.slice(0, 250)),
+      recommendedActions: parsed.recommendedActions.filter(v => typeof v === 'string').slice(0, 4).map(v => v.slice(0, 250)),
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 function requestJson(
   urlString,
@@ -862,6 +949,39 @@ async function assessZone({
         'The trained crowd-surge model currently shows a low crowd-increase signal.';
     }
 
+    let copilotSummary = summary;
+    let copilotWhy = why.slice(0, 4);
+    let copilotActions = recommendedActions.slice(0, 4);
+    let copilotProvider = 'local-ai';
+
+    try {
+      const gemini = await generateGeminiCopilot({
+        zoneName: zone?.name || zoneId,
+        count: actualCount,
+        capacity,
+        occupancy,
+        inflowRate: Number(inflowRate.toFixed(2)),
+        outflowRate: Number(outflowRate.toFixed(2)),
+        risk,
+        riskLevel,
+        surgeScore,
+        anomalyScore,
+        panicReports: actualPanicCount,
+        incidentCount: actualIncidentCount,
+        currentSummary: summary,
+        why: copilotWhy,
+        recommendedActions: copilotActions
+      });
+      if (gemini) {
+        copilotSummary = gemini.summary;
+        copilotWhy = gemini.why.length ? gemini.why : copilotWhy;
+        copilotActions = gemini.recommendedActions.length ? gemini.recommendedActions : copilotActions;
+        copilotProvider = 'gemini';
+      }
+    } catch (error) {
+      console.warn(`[Gemini] Copilot explanation unavailable; using model-derived explanation: ${error.message}`);
+    }
+
     /*
      * Final dashboard-compatible response
      */
@@ -920,16 +1040,13 @@ async function assessZone({
       },
 
       copilot: {
-        summary,
+        summary: copilotSummary,
 
-        why:
-          why.slice(0, 4),
+        why: copilotWhy,
 
-        recommendedActions:
-          recommendedActions.slice(0, 4),
+        recommendedActions: copilotActions,
 
-        provider:
-          'local-ai',
+        provider: copilotProvider,
 
         confidence:
           modelConfidence,
