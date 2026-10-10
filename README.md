@@ -11,7 +11,7 @@ for exactly what is live logic vs. simulated input.
 The frontend is now a React + Vite app, but it ships **already built**:
 `backend/public/` is the built output, and the backend serves it
 directly, so you don't need Node's React toolchain installed just to
-run the demo. You only need `frontend-react/` if you want to change the
+run the demo. You only need `frontend/` if you want to change the
 UI, see "Modifying the frontend" below.
 
 **Terminal 1: backend + dashboard**
@@ -72,10 +72,10 @@ The app works fine with no `.env` file at all.
 
 ## Modifying the frontend
 
-The dashboard's source is `frontend-react/` (React + Vite). After
+The dashboard's source is `frontend/` (React + Vite). After
 changing anything in there:
 ```
-cd frontend-react
+cd frontend
 npm install
 npm run build
 ```
@@ -84,12 +84,12 @@ restart (or just a page refresh, if the backend is already running)
 picks up the change. For active development with hot reload instead of
 rebuilding every time:
 ```
-cd frontend-react
+cd frontend
 npm run dev
 ```
 This starts a separate dev server (typically `http://localhost:5173`)
 that proxies `/api` and `/socket.io` to the backend on port 4000 (see
-`vite.config.js`), so run the backend in another terminal as usual.
+`vite.config.ts`), so run the backend in another terminal as usual.
 
 **Why React + Vite instead of the plain HTML/JS version this started
 as:** component structure, a real build step, and a proper dependency
@@ -106,7 +106,7 @@ here would be using the wrong tool for the job. The map now uses Esri's
 free World Imagery satellite tiles instead: no API key, no cloud
 account, same "look down at the real venue from above" effect that
 was actually wanted, in about five lines of config (see
-`frontend-react/src/components/MapView.tsx`).
+`frontend/src/components/MapView.tsx`).
 
 ## Real sensing without buying any hardware
 
@@ -184,7 +184,7 @@ strength, not a weakness)
 | **Post-event analytics** | **Real**, computed live from this session's actual incident log: total alerts, dispatch count, avg time-to-stabilize, peak zone. Not placeholder numbers. |
 | Nearest-responder dispatch (including preemptive dispatch on a predicted bottleneck) | **Real** haversine great-circle distance calculation against actual responder coordinates. |
 | SMS/USSD fallback channel | **Simulated and clearly labeled as such** in the UI ("SMS fallback (simulated)"). No real Twilio/SMS gateway wired up: that needs a paid account. A real webhook (Slack/Discord) notification does fire for real on critical/corroborated alerts if `WEBHOOK_URL` is set in `.env`: that's a genuine free channel, unlike SMS. |
-| IoT sensors | **Real options now available, simulator still included for quick testing.** `backend/camera-sensor.py` does real, free computer-vision people counting from any camera. `/manual-counter.html` (served by the backend, source in `frontend-react/public/`) is a real volunteer-operated tally. `simulator.js` remains for convenience when you just want to see the dashboard move without setting up either. See "Real sensing without buying any hardware" above. |
+| IoT sensors | **Real options now available, simulator still included for quick testing.** `backend/camera-sensor.py` does real, free computer-vision people counting from any camera. `/manual-counter.html` (served by the backend, source in `frontend/public/`) is a real volunteer-operated tally. `simulator.js` remains for convenience when you just want to see the dashboard move without setting up either. See "Real sensing without buying any hardware" above. |
 | Attendee GPS | **Manual by default, with a real option.** A "Use my real device location" button calls the browser's actual `navigator.geolocation` API: a genuine permission prompt and real coordinates, not simulated. Manual lat/lng entry and map-click remain available too. |
 | Data persistence | Incidents are logged to `backend/data/incidents.log.jsonl` on disk. In-memory for live state. Good enough for a demo; use managed PostgreSQL for durable production storage. |
 | Network-loss resilience demo | **Real.** The "Simulate network loss" button actually disconnects the Socket.io connection; reconnecting actually flushes queued events to `/api/sync`. |
@@ -230,7 +230,7 @@ A few things judges are likely to ask about, and where things stand:
 | **Attendee GPS is manual, not real device location** | Partially fixed. There's now a real "Use my real device location" button using the browser's actual `navigator.geolocation` API. Since the demo zones sit at fixed placeholder coordinates, your real device location will almost always land "outside all mapped zones" unless you're physically there. That's correct behavior; the geolocation call itself is genuine. |
 | **No health check, and no way to reset state between demo runs without restarting the server** | Fixed. `GET /api/health` reports uptime and whether a webhook is configured. `POST /api/reset-demo` (admin-gated) resets all zones, responders, and incidents to a fresh starting state without restarting the process, useful for running the demo back-to-back for multiple judges. |
 | **Zone density history wasn't visible anywhere except the map tooltip** | Fixed. Each zone in the sidebar list now shows a small live sparkline of its last few readings. |
-| **No real DPDP Act / privacy compliance** | Documented, not implemented. See `/privacy.html` (served by the backend, source in `frontend-react/public/`), which states plainly what would still be needed for a real deployment. |
+| **No real DPDP Act / privacy compliance** | Documented, not implemented. See `/privacy.html` (served by the backend, source in `frontend/public/`), which states plainly what would still be needed for a real deployment. |
 
 The two "not fixed" rows above are intentionally left as real, named limitations rather than glossed over. If a judge asks about them, the honest answer, "we identified this, here's the concrete next step," lands better than pretending it's solved.
 
@@ -281,9 +281,9 @@ backend/
   requirements.txt   Python dependencies for camera-sensor.py
   config.js          venue coordinates, zones, responder starting positions, thresholds
   .env.example       documented optional environment variables
-  public/            built frontend output (generated by frontend-react, served as-is)
+  public/            built frontend output (generated by frontend, served as-is)
   data/              incident log (created at runtime)
-frontend-react/
+frontend/
   src/               React app source (components, styles, API/socket helpers)
   public/            static pages carried through the build unchanged:
                      manual-counter.html, privacy.html, terms.html
@@ -298,11 +298,11 @@ event's coordinates before using this for anything beyond a demo.
 
 
 ## Frontend architecture
-The dashboard frontend is now a React 18 + Vite + JavaScript application styled with Tailwind CSS. The source lives in `frontend-react/src`, and `npm run build` outputs the production bundle to `backend/public` so the existing Express backend can serve it from the same origin.
+The dashboard frontend is now a React 18 + Vite + JavaScript application styled with Tailwind CSS. The source lives in `frontend/src`, and `npm run build` outputs the production bundle to `backend/public` so the existing Express backend can serve it from the same origin.
 
 ### Frontend development
 ```bash
-cd frontend-react
+cd frontend
 npm install
 npm run dev
 ```
@@ -310,7 +310,7 @@ Vite proxies `/api` and `/socket.io` to the backend at `http://localhost:4000`.
 
 ### Production build
 ```bash
-cd frontend-react
+cd frontend
 npm run build
 cd ../backend
 npm start
@@ -389,7 +389,7 @@ Ollama's default local API does not require an API key. Keep it bound to localho
 
 ### Optional RAG service
 
-The separate RAG service is **not part of the existing backend unless you add the integration files**. If using the starter implementation developed for this project, its expected layout is:
+The separate RAG service and Ollama chat integration are **not currently included in the committed application code**. The following is a proposed layout for adding them; these commands will not work until you create the service files and requirements:
 
 ```text
 rag-service/
@@ -407,7 +407,7 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-The starter service uses these local endpoints:
+The optional service, once implemented and configured locally, is expected to expose these endpoints:
 
 - `GET http://127.0.0.1:8001/health` — service/model configuration and indexed chunk count.
 - `POST http://127.0.0.1:8001/ingest` — index an authorized PDF.
@@ -434,7 +434,7 @@ Use the existing backend's authentication middleware on the AI proxy route. Do n
 
 ### Vercel deployment note
 
-The React/Vite frontend can be deployed to Vercel with `frontend-react/` as the root directory, `npm run build` as the build command, and `dist` as the output directory **only if that matches the repository's Vite configuration**. A Vercel-hosted frontend cannot reach `localhost:11434` on a developer's laptop. To enable AI in production, deploy the authenticated backend and model/RAG service to an appropriately secured reachable host, or keep the AI feature local-only during demos. Do not publish Ollama's unauthenticated local API.
+The React/Vite frontend can be deployed to Vercel with `frontend/` as the root directory, `npm run build` as the build command, and `dist` as the output directory **only if that matches the repository's Vite configuration**. A Vercel-hosted frontend cannot reach `localhost:11434` on a developer's laptop. To enable AI in production, deploy the authenticated backend and model/RAG service to an appropriately secured reachable host, or keep the AI feature local-only during demos. Do not publish Ollama's unauthenticated local API.
 
 ### Troubleshooting
 
@@ -445,3 +445,37 @@ The React/Vite frontend can be deployed to Vercel with `frontend-react/` as the 
 - Poor retrieval: evaluate chunking and similarity thresholds against actual venue documents; the starter threshold is not validated for production.
 - Do not send every camera frame to the LLM. Use the existing vision/risk pipeline for continuous monitoring and call the LLM for operator questions or selected alerts.
 
+
+
+## Deploy the frontend to Vercel
+
+The actual source directory in this repository is `frontend/` (not `frontend-react/`). In Vercel, import this repository and use:
+
+- **Root Directory:** `frontend`
+- **Framework Preset:** Vite
+- **Build Command:** `npm run build`
+- **Output Directory:** `dist`
+- **Install Command:** `npm install`
+
+The Vite configuration is set to build to `dist/` on Vercel and to `../backend/public/` for local/Docker builds. This keeps Vercel's output inside its project root while preserving the existing Express-served local app.
+
+### Frontend environment variable
+
+After deploying the backend to a public HTTPS host, set this variable in **Vercel → Project → Settings → Environment Variables**:
+
+```env
+VITE_API_URL=https://YOUR-BACKEND-DOMAIN
+```
+
+Replace the value with the real backend origin, with no trailing slash, then redeploy. Leave `VITE_API_URL` unset for local development; Vite will proxy API and Socket.IO requests to `http://localhost:4000`.
+
+**Important:** Vercel only deploys the frontend in this setup. The Express backend, Socket.IO server, PostgreSQL, and any optional AI/RAG/Ollama service must run separately on reachable infrastructure. A browser running on the internet cannot use your laptop's `localhost:4000` or `localhost:11434`. The backend must allow the deployed frontend's origin in its HTTP and Socket.IO CORS configuration. Do not expose Ollama's unauthenticated local API publicly.
+
+### If a new GitHub commit does not update Vercel
+
+1. Confirm Vercel is linked to `Warrior1012/Crowdpulse` and the production branch is `main`.
+2. Open **Deployments** and inspect the latest deployment's build logs.
+3. Confirm the Root Directory is `frontend`, not the repository root or `frontend-react`.
+4. Confirm the latest deployment references the new commit SHA.
+5. After changing environment variables, redeploy so the new values are included in the frontend build.
+6. If the build succeeds but dashboard requests fail, check the browser Network panel: API and Socket.IO must target the deployed backend, not the Vercel origin or localhost.
