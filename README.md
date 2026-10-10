@@ -346,3 +346,102 @@ CrowdPulse now includes a local ML service plus optional Gemini reasoning.
 - PostgreSQL: persists AI predictions and features for later evaluation/retraining.
 
 Without a Gemini key the local AI still runs and the dashboard falls back to the local copilot.
+
+## Optional local Llama (Ollama) and RAG
+
+This is an optional local-development integration path for adding a language-model assistant to CrowdPulse. **Do not treat it as already wired into the committed app unless the `rag-service/` files and backend proxy route have been added and tested.** The current committed README describes the existing YOLOv8n camera sensor and local ML/risk layer; those components remain responsible for detection and risk scoring.
+
+### Responsibilities
+
+- **YOLOv8n camera sensor:** detects people in a camera feed and submits count readings.
+- **Existing CrowdPulse risk/alert engine:** evaluates crowd readings and triggers operational alerts.
+- **Ollama + Llama 3.2 3B:** explains supplied metrics and drafts operator-facing summaries.
+- **Ollama + nomic-embed-text + ChromaDB:** optional RAG pipeline for retrieving passages from authorized venue SOPs and safety PDFs.
+- **React dashboard:** displays AI responses only after the frontend is connected to the backend proxy.
+
+The LLM must not be the sole trigger for critical alerts. Keep alert thresholds and emergency escalation in the deterministic CrowdPulse logic, and verify recommendations against official venue procedures.
+
+### Requirements
+
+- Windows, macOS, or Linux development machine with Ollama installed.
+- Python virtual environment for the optional RAG service.
+- Enough memory for the selected local model. Start with `llama3.2:3b`; actual performance depends on hardware and quantization.
+- Authorized, text-readable venue SOPs or safety PDFs for RAG. Scanned PDFs require OCR before text can be indexed.
+
+### Install and test Ollama on Windows
+
+Install Ollama from [ollama.com/download/windows](https://ollama.com/download/windows), then open PowerShell:
+
+```powershell
+ollama --version
+ollama pull llama3.2:3b
+ollama pull nomic-embed-text
+ollama run llama3.2:3b
+```
+
+Type a test prompt, then exit with `/bye`. Check that the local API responds:
+
+```powershell
+Invoke-RestMethod http://localhost:11434/api/tags
+```
+
+Ollama's default local API does not require an API key. Keep it bound to localhost for local development; do not expose it directly to the public internet.
+
+### Optional RAG service
+
+The separate RAG service is **not part of the existing backend unless you add the integration files**. If using the starter implementation developed for this project, its expected layout is:
+
+```text
+rag-service/
+  app.py
+  requirements.txt
+  documents/
+  chroma_db/       # generated locally; do not commit this database
+```
+
+Create and activate a virtual environment from `rag-service/`, then install the requirements:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+```
+
+The starter service uses these local endpoints:
+
+- `GET http://127.0.0.1:8001/health` — service/model configuration and indexed chunk count.
+- `POST http://127.0.0.1:8001/ingest` — index an authorized PDF.
+- `POST http://127.0.0.1:8001/ask` — retrieve document passages and request an answer from the local model.
+- Ollama API: `http://127.0.0.1:11434`.
+
+After the RAG code and dependencies are in place, start it with:
+
+```powershell
+python -m uvicorn app:app --host 127.0.0.1 --port 8001 --reload
+```
+
+Then open [http://127.0.0.1:8001/docs](http://127.0.0.1:8001/docs) to test the endpoints. Upload a real, authorized safety PDF before asking venue-specific questions. If no relevant source is retrieved, the assistant should say it lacks evidence rather than inventing a procedure.
+
+### Connecting the React frontend
+
+For a local setup, the recommended request flow is:
+
+```text
+React dashboard -> authenticated Express API -> local RAG service -> Ollama
+```
+
+Use the existing backend's authentication middleware on the AI proxy route. Do not expose the RAG service or Ollama directly to the public internet. Keep local service URLs in environment variables; never put secrets in variables prefixed with `VITE_`, because those are bundled into frontend code.
+
+### Vercel deployment note
+
+The React/Vite frontend can be deployed to Vercel with `frontend-react/` as the root directory, `npm run build` as the build command, and `dist` as the output directory **only if that matches the repository's Vite configuration**. A Vercel-hosted frontend cannot reach `localhost:11434` on a developer's laptop. To enable AI in production, deploy the authenticated backend and model/RAG service to an appropriately secured reachable host, or keep the AI feature local-only during demos. Do not publish Ollama's unauthenticated local API.
+
+### Troubleshooting
+
+- `ollama --version` prints nothing or hangs: check the installed executable path and running Ollama process; test `ollama list` and `http://localhost:11434/api/tags`.
+- Connection refused on port `11434`: Ollama's local server is not listening or is configured on another address.
+- Connection refused on port `8001`: the optional RAG service is not running.
+- Empty RAG results: ingest a text-readable PDF and verify `/health` reports a non-zero `indexed_chunks` count.
+- Poor retrieval: evaluate chunking and similarity thresholds against actual venue documents; the starter threshold is not validated for production.
+- Do not send every camera frame to the LLM. Use the existing vision/risk pipeline for continuous monitoring and call the LLM for operator questions or selected alerts.
+
