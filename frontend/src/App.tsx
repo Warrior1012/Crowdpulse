@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import TopBar from './components/TopBar';
-import type { RedisStatus } from './components/TopBar';
 import ZoneList from './components/ZoneList';
 import MapView from './components/MapView';
 import OpsFeed from './components/OpsFeed';
@@ -17,9 +16,14 @@ interface AttendeeEvent { lat?: number; lng?: number }
 
 const MAX_FEED = 30;
 const MAX_PANIC_MARKERS = 20;
-type AppTab = 'feed' | 'attendee' | 'analytics';
-const TABS: Array<[AppTab, string]> = [['feed', 'Ops feed'], ['attendee', 'Attendee app'], ['analytics', 'Analytics']];
+type AppTab = 'feed' | 'attendee' | 'analytics' | 'reporting';
 
+const TABS: Array<[AppTab, string]> = [
+  ['feed', 'Ops feed'],
+  ['attendee', 'Attendee app'],
+  ['analytics', 'Analytics'],
+  ['reporting', 'AI Incident Reporting'],
+];
 function Dashboard({ onLogout }: { onLogout: () => void }) {
   const [venueCenter, setVenueCenter] = useState<[number, number]>([26.912, 75.787]);
   const [zones, setZones] = useState<Zone[]>([]);
@@ -34,7 +38,6 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
   const [offline, setOffline] = useState(false);
   const [backendDown, setBackendDown] = useState(false);
   const [databaseConnected, setDatabaseConnected] = useState(false);
-  const [redisStatus, setRedisStatus] = useState<RedisStatus>('unknown');
   const [aiAssessment, setAiAssessment] = useState<AIAssessment | null>(null);
   const [tab, setTab] = useState<AppTab>('feed');
   const [lat, setLat] = useState<string>('26.9130');
@@ -87,7 +90,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
       getJSON<Zone[]>('/api/zones'),
       getJSON<Incident[]>('/api/incidents?limit=15'),
       getJSON<Responder[]>('/api/responders'),
-      getJSON<{ database?: string; redis?: RedisStatus }>('/api/health'),
+      getJSON<{ database?: string }>('/api/health'),
       getJSON<AdminMapSnapshot>('/api/admin-map').catch(() => null),
       getJSON<UploadedReportMarker[]>('/api/attendee-reports').catch(() => []),
     ]);
@@ -102,7 +105,6 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
     if (Array.isArray(mapData?.casualties)) setCasualties(mapData.casualties);
     setUploadedReports(Array.isArray(reportsData) ? reportsData : (mapData?.uploadedPeople ?? []));
     setDatabaseConnected(health?.database === 'connected');
-    setRedisStatus(health?.redis ?? 'unknown');
     try { const latestAI = await getJSON<AIAssessment[]>('/api/ai/latest'); if (latestAI?.length) setAiAssessment(latestAI[0]); } catch (err) { console.warn('AI latest unavailable:', err); }
     setBackendDown(false);
   }, []);
@@ -321,7 +323,6 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
     <div className="min-h-screen bg-cp-bg text-cp-text web3-shell">
       <TopBar
         databaseConnected={databaseConnected}
-        redisStatus={redisStatus}
         aiLive={Boolean(aiAssessment)}
         connected={connected}
         offline={offline}
@@ -453,6 +454,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
             {tab === 'feed' && <OpsFeed incidents={incidents} />}
             {tab === 'attendee' && (
               <AttendeePanel
+                view="location"
                 lat={lat}
                 lng={lng}
                 setLat={setLat}
@@ -462,6 +464,18 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
                 queueOfflineEvent={queueOfflineEvent}
               />
             )}
+            {tab === 'reporting' && (
+  <AttendeePanel
+    view="reporting"
+    lat={lat}
+    lng={lng}
+    setLat={setLat}
+    setLng={setLng}
+    connected={connected && !offline}
+    onLocationUpdate={handleAttendeeLocationUpdate}
+    queueOfflineEvent={queueOfflineEvent}
+  />
+)}
             {tab === 'analytics' && <AnalyticsPanel active={tab === 'analytics'} />}
             </div>
           </div>
