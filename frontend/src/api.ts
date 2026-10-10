@@ -1,7 +1,9 @@
 import { io, type Socket } from 'socket.io-client';
 import type { DemoPayload, ZoneStatus } from './models';
 
-export const API = '';
+// Leave VITE_API_URL empty for local development (Vite proxies to localhost:4000).
+// Set it to the deployed backend origin in Vercel project environment variables.
+export const API = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
 const TOKEN_KEY = 'crowdpulse_jwt';
 
 export function getToken(): string | null { return sessionStorage.getItem(TOKEN_KEY); }
