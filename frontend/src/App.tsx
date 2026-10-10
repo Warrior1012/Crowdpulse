@@ -449,6 +449,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
             {tab === 'feed' && <OpsFeed incidents={incidents} />}
             {tab === 'attendee' && (
               <AttendeePanel
+                view="location"
                 lat={lat}
                 lng={lng}
                 setLat={setLat}
