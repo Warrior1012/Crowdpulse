@@ -637,7 +637,15 @@ function applySensorReading(zoneId, count, source) {
 /* ---------------- REST API ---------------- */
 app.post('/api/auth/login', async (req, res) => {
   const { username, password } = req.body || {};
-  const dbUser = username && password ? await db.getUserByUsername(username) : null;
+  let dbUser = null;
+  if (username && password) {
+    try {
+      dbUser = await db.getUserByUsername(username);
+    } catch (err) {
+      // A temporary database outage must not crash the whole web service.
+      console.warn('Login database lookup failed; checking configured demo users:', err.message);
+    }
+  }
   const user = dbUser && dbUser.password_hash === require('crypto').createHash('sha256').update(String(password || '')).digest('hex')
     ? { username: dbUser.username, role: dbUser.role, password: String(password) }
     : AUTH_USERS.find(u => u.username === username && u.password === password);
@@ -1320,8 +1328,8 @@ async function start() {
       process.exit(1);
     });
 
-    server.listen(port, () => {
-      console.log(`CrowdPulse backend running: http://localhost:${port} | PostgreSQL ${databaseAvailable ? 'connected' : 'unavailable (in-memory fallback)'} | session=${SESSION_ID}`);
+    server.listen(port, '0.0.0.0', () => {
+      console.log(`CrowdPulse backend listening on 0.0.0.0:${port} | PostgreSQL ${databaseAvailable ? 'connected' : 'unavailable (in-memory fallback)'} | session=${SESSION_ID}`);
     });
   }
 
