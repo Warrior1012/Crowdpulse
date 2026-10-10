@@ -16,14 +16,9 @@ interface AttendeeEvent { lat?: number; lng?: number }
 
 const MAX_FEED = 30;
 const MAX_PANIC_MARKERS = 20;
-type AppTab = 'feed' | 'attendee' | 'analytics' | 'reporting';
+type AppTab = 'feed' | 'attendee' | 'analytics';
+const TABS: Array<[AppTab, string]> = [['feed', 'Ops feed'], ['attendee', 'Attendee app'], ['analytics', 'Analytics']];
 
-const TABS: Array<[AppTab, string]> = [
-  ['feed', 'Ops feed'],
-  ['attendee', 'Attendee app'],
-  ['analytics', 'Analytics'],
-  ['reporting', 'AI Incident Reporting'],
-];
 function Dashboard({ onLogout }: { onLogout: () => void }) {
   const [venueCenter, setVenueCenter] = useState<[number, number]>([26.912, 75.787]);
   const [zones, setZones] = useState<Zone[]>([]);
@@ -454,7 +449,6 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
             {tab === 'feed' && <OpsFeed incidents={incidents} />}
             {tab === 'attendee' && (
               <AttendeePanel
-                view="location"
                 lat={lat}
                 lng={lng}
                 setLat={setLat}
@@ -464,18 +458,6 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
                 queueOfflineEvent={queueOfflineEvent}
               />
             )}
-            {tab === 'reporting' && (
-  <AttendeePanel
-    view="reporting"
-    lat={lat}
-    lng={lng}
-    setLat={setLat}
-    setLng={setLng}
-    connected={connected && !offline}
-    onLocationUpdate={handleAttendeeLocationUpdate}
-    queueOfflineEvent={queueOfflineEvent}
-  />
-)}
             {tab === 'analytics' && <AnalyticsPanel active={tab === 'analytics'} />}
             </div>
           </div>
