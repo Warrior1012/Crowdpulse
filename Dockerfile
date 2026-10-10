@@ -1,8 +1,8 @@
 FROM node:20-alpine AS frontend-builder
 WORKDIR /app/frontend
-COPY frontend-react/package*.json ./
+COPY frontend/package*.json ./
 RUN npm install
-COPY frontend-react/ ./
+COPY frontend/ ./
 RUN npm run build
 
 FROM node:20-alpine
