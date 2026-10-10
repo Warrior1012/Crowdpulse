@@ -1095,21 +1095,57 @@ async function assessZone({
       `[AI] AI service unavailable for zone ${zoneId}: ${error.message}`
     );
 
-    return buildFallbackAssessment({
+    const fallback = buildFallbackAssessment({
       zoneId,
-
-      currentCount:
-        actualCount,
-
-      history:
-        historyValues,
-
-      panicCount:
-        actualPanicCount,
-
-      incidentCount:
-        actualIncidentCount,
+      currentCount: actualCount,
+      history: historyValues,
+      panicCount: actualPanicCount,
+      incidentCount: actualIncidentCount,
     });
+
+    // Gemini can still explain the deterministic fallback assessment if the
+    // separate ML inference service is unavailable. It does not generate or
+    // override the risk score, risk level, or model confidence.
+    try {
+      const gemini = await generateGeminiCopilot({
+        zoneName: zone?.name || zoneId,
+        count: actualCount,
+        capacity,
+        occupancy,
+        inflowRate: Number(inflowRate.toFixed(2)),
+        outflowRate: Number(outflowRate.toFixed(2)),
+        risk: fallback.risk,
+        riskLevel: fallback.riskLevel,
+        surgeScore: fallback.surgeScore,
+        anomalyScore: fallback.anomalyScore,
+        panicReports: actualPanicCount,
+        incidentCount: actualIncidentCount,
+        currentSummary: fallback.copilot.summary,
+        why: fallback.copilot.why,
+        recommendedActions: fallback.copilot.recommendedActions,
+      });
+      if (gemini) {
+        fallback.copilot = {
+          ...fallback.copilot,
+          summary: gemini.summary,
+          why: gemini.why.length ? gemini.why : fallback.copilot.why,
+          recommendedActions: gemini.recommendedActions.length
+            ? gemini.recommendedActions
+            : fallback.copilot.recommendedActions,
+          provider: 'gemini',
+          confidence: 0,
+          caveats: [
+            'Gemini generated the operator-facing explanation only.',
+            'Risk score is from the local fallback calculation, not the Gemini model.',
+            'The separate ML inference service was unavailable for this reading.',
+          ],
+        };
+      }
+    } catch (geminiError) {
+      console.warn(`[Gemini] Fallback explanation unavailable: ${geminiError.message}`);
+    }
+
+    return fallback;
   }
 }
 
