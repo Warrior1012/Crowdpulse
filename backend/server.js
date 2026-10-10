@@ -6,10 +6,7 @@ const path = require('path');
 const fs = require('fs');
 const cors = require('cors');
 const { Server } = require('socket.io');
-const Redis = require('ioredis');
-const { createAdapter } = require('@socket.io/redis-adapter');
 const jwt = require('jsonwebtoken');
-const crypto = require('crypto');
 const { VENUE_CENTER, ZONES, RESPONDERS, ADJACENCY, ADMIN_KEY, THRESHOLDS } = require('./config');
 const db = require('./db');
 const { assessZone } = require('./ai-engine');
@@ -20,23 +17,8 @@ const CAMP_LOCATIONS = [
   { id: 'camp-south', name: 'South Aid Camp', lat: 26.9108, lng: 75.7890 },
   { id: 'camp-east', name: 'East Relief Point', lat: 26.9116, lng: 75.7898 },
 ];
-const SERVER_INSTANCE_ID = crypto.randomUUID();
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-only-change-this-jwt-secret';
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '8h';
-// Redis is OPTIONAL. It only matters if you run more than one backend
-// instance and need Socket.IO events to fan out across them. A single
-// instance (the normal case for a demo) works fully without it: every
-// event is emitted to this instance's own connected clients directly,
-// and Redis publishing underneath that is best-effort, never required.
-// Set DISABLE_REDIS=true to skip even attempting a connection.
-const REDIS_DISABLED = String(process.env.DISABLE_REDIS || '').toLowerCase() === 'true';
-const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
-const REDIS_PASSWORD = process.env.REDIS_PASSWORD || '';
-const REDIS_TLS = String(process.env.REDIS_TLS || 'false').toLowerCase() === 'true';
-const REDIS_TLS_CA = process.env.REDIS_TLS_CA || '';
-const REDIS_TLS_REJECT_UNAUTHORIZED = String(process.env.REDIS_TLS_REJECT_UNAUTHORIZED || 'true').toLowerCase() !== 'false';
-const REDIS_CHANNEL = process.env.REDIS_CHANNEL || 'crowdpulse:events';
-let redisEnabled = false; // flips true only after a real successful connection
 const AUTH_USERS = [
   { username: process.env.ADMIN_USERNAME || 'admin', password: process.env.ADMIN_PASSWORD || 'crowdpulse-admin', role: 'admin' },
   { username: process.env.OPERATOR_USERNAME || 'operator', password: process.env.OPERATOR_PASSWORD || 'crowdpulse-operator', role: 'operator' },
@@ -51,76 +33,10 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 const server = http.createServer(app);
-const redisOptions = {
-  lazyConnect: true,
-  maxRetriesPerRequest: 3,
-  retryStrategy: () => null, // don't keep retrying forever if Redis is genuinely absent
-  ...(REDIS_PASSWORD ? { password: REDIS_PASSWORD } : {}),
-  ...(REDIS_TLS ? {
-    tls: {
-      ca: REDIS_TLS_CA ? fs.readFileSync(REDIS_TLS_CA) : undefined,
-      rejectUnauthorized: REDIS_TLS_REJECT_UNAUTHORIZED,
-      servername: process.env.REDIS_TLS_SERVERNAME || 'redis',
-    },
-  } : {}),
-};
-const redisPub = REDIS_DISABLED ? null : new Redis(REDIS_URL, redisOptions);
-const redisSub = REDIS_DISABLED ? null : new Redis(REDIS_URL, redisOptions);
-const redisAdapterPub = REDIS_DISABLED ? null : new Redis(REDIS_URL, redisOptions);
-const redisAdapterSub = REDIS_DISABLED ? null : new Redis(REDIS_URL, redisOptions);
-if (!REDIS_DISABLED) {
-  redisPub.on('error', err => { if (redisEnabled) console.error('Redis publisher error:', err.message); });
-  redisSub.on('error', err => { if (redisEnabled) console.error('Redis subscriber error:', err.message); });
-  redisAdapterPub.on('error', err => { if (redisEnabled) console.error('Redis Socket.IO publisher error:', err.message); });
-  redisAdapterSub.on('error', err => { if (redisEnabled) console.error('Redis Socket.IO subscriber error:', err.message); });
-}
 const io = new Server(server, { cors: { origin: '*' } });
 
-// Every event is always delivered to this instance's own clients
-// immediately and directly. Redis (if connected) is used ONLY as a
-// best-effort side channel so other instances, if any, also see it.
-// This is what actually fixes single-instance mode: previously every
-// event's *only* delivery path was publish-to-redis then wait for our
-// own subscription to hear it back, so a Redis outage silently killed
-// the entire live dashboard even with zero scaling in play.
 async function publishEvent(event, payload) {
   io.emit(event, payload);
-  if (!redisEnabled) return;
-  try {
-    await redisPub.publish(REDIS_CHANNEL, JSON.stringify({ event, payload, ts: timeNow(), sessionId: SESSION_ID, origin: SERVER_INSTANCE_ID }));
-  } catch (err) {
-    console.error('Redis publish failed (event was still delivered locally):', err.message);
-  }
-}
-
-// Attempts a real Redis connection with a bounded timeout. Resolves to
-// true/false rather than throwing, so a missing/misconfigured Redis
-// never takes down server startup: this fixes the previous behavior
-// where a Redis connection failure was caught by the same try/catch as
-// the database and reported, incorrectly, as "Database startup failed."
-async function tryEnableRedis() {
-  if (REDIS_DISABLED) { console.log('Redis disabled via DISABLE_REDIS=true; running single-instance.'); return false; }
-  try {
-    await Promise.all([redisPub.connect(), redisSub.connect(), redisAdapterPub.connect(), redisAdapterSub.connect()]);
-    await redisSub.subscribe(REDIS_CHANNEL);
-    redisSub.on('message', (channel, raw) => {
-      if (channel !== REDIS_CHANNEL) return;
-      try {
-        const message = JSON.parse(raw);
-        if (message.sessionId && message.sessionId !== SESSION_ID) return;
-        if (message.origin === SERVER_INSTANCE_ID) return; // already emitted locally by publishEvent
-        io.emit(message.event, message.payload);
-      } catch (err) {
-        console.error('Invalid Redis event:', err.message);
-      }
-    });
-    io.adapter(createAdapter(redisAdapterPub, redisAdapterSub));
-    console.log(`Redis Pub/Sub connected: ${REDIS_CHANNEL} (${REDIS_TLS ? 'TLS' : 'no TLS'}). Multi-instance broadcast enabled.`);
-    return true;
-  } catch (err) {
-    console.warn(`Redis unavailable (${err.message}); continuing in single-instance mode. This is fine for one backend process; it only matters if you run more than one.`);
-    return false;
-  }
 }
 io.use((socket, next) => {
   const token = socket.handshake.auth?.token;
@@ -737,11 +653,9 @@ app.get('/api/auth/me', requireAuth, (req, res) => {
 app.get('/api/health', async (req, res) => {
   try {
     const dbHealth = await db.health();
-    let redis = 'disabled';
-    if (redisEnabled) { try { await redisPub.ping(); redis = 'connected'; } catch { redis = 'down'; } }
-    res.json({ ok: true, database: 'connected', redis, ai: { local: true, gemini: Boolean(process.env.GEMINI_API_KEY), service: process.env.AI_SERVICE_URL || 'http://localhost:8000' }, now: dbHealth.now });
+    res.json({ ok: true, database: 'connected', ai: { local: true, gemini: Boolean(process.env.GEMINI_API_KEY), service: process.env.AI_SERVICE_URL || 'http://localhost:8000' }, now: dbHealth.now });
   } catch (err) {
-    res.status(503).json({ ok: false, database: 'down', redis: redisEnabled ? 'unknown' : 'disabled', ai: { local: true, gemini: Boolean(process.env.GEMINI_API_KEY) }, error: err.message });
+    res.status(503).json({ ok: false, database: 'down', ai: { local: true, gemini: Boolean(process.env.GEMINI_API_KEY) }, error: err.message });
   }
 });
 
@@ -1383,8 +1297,6 @@ async function start() {
     console.warn('Continuing in in-memory fallback mode. PostgreSQL is optional for the prototype demo, but attendee/auth persistence will be disabled until the database is available.');
   }
 
-  redisEnabled = await tryEnableRedis(); // never fatal, see tryEnableRedis()
-
   if (databaseAvailable) {
     try {
       const latest = await db.loadLatestZoneReadings(SESSION_ID);
@@ -1409,7 +1321,7 @@ async function start() {
     });
 
     server.listen(port, () => {
-      console.log(`CrowdPulse backend running: http://localhost:${port} | PostgreSQL ${databaseAvailable ? 'connected' : 'unavailable (in-memory fallback)'} | Redis ${redisEnabled ? 'connected' : 'disabled (single-instance mode)'} | session=${SESSION_ID}`);
+      console.log(`CrowdPulse backend running: http://localhost:${port} | PostgreSQL ${databaseAvailable ? 'connected' : 'unavailable (in-memory fallback)'} | session=${SESSION_ID}`);
     });
   }
 
