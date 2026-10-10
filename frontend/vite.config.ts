@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react';
 
 // Locally, build into backend/public so Express can serve the dashboard.
 // Vercel sets VERCEL=1; its build must stay inside the frontend project root.
-const isVercel = process.env.VERCEL === '1';
+const isVercel = (globalThis as any).process?.env?.VERCEL === '1';
 
 export default defineConfig({
   plugins: [react()],
