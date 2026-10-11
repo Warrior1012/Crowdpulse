@@ -62,9 +62,9 @@ Use the Vite URL printed in the terminal. The repository contains a prebuilt das
 
 ## Native Render deployment (without Docker or Redis)
 
-A native-runtime Blueprint is provided in `render.yaml`. It defines a Node.js backend and a Python AI service, with health checks and no Redis dependency. The frontend is built during the backend service's build command.
+A native Node.js Blueprint is provided in `render.yaml`; a separate native Python AI service has also been created on Render at `https://crowdpulse-ai-native.onrender.com`. Both use native runtimes and no Redis. The frontend is built during the backend service's build command.
 
-**Migration warning:** the currently running Render services are still configured for Docker, and Render's in-place runtime setting cannot be changed by a repository commit. Apply `render.yaml` in the Render dashboard to create the native services alongside the current services. For `DATABASE_URL`, copy the connection string for the existing `crowdpulse-db` database (do not create a replacement database) and provide the same strong application passwords/keys. Confirm `/api/health`, `/health`, `/flow-model/health`, and the AI flow-forecast smoke test before switching users over. Only then remove the two remaining legacy Dockerfiles and retire the old Docker services.
+**Migration warning:** the currently running Render services are still configured for Docker, and Render's in-place runtime setting cannot be changed by a repository commit. Apply `render.yaml` in the Render dashboard to create the native Node.js backend alongside the current backend. For `DATABASE_URL`, copy the connection string for the existing `crowdpulse-db` database (do not create a replacement database) and provide strong application passwords/keys. The native Python AI service is already created at `https://crowdpulse-ai-native.onrender.com`. Confirm `/api/health`, `/health`, `/flow-model/health`, and the AI flow-forecast smoke test before switching users over. Only then remove the two remaining legacy Dockerfiles and retire the old Docker services.
 
 GitHub Actions runs frontend build/type checks, backend syntax/unit tests, and AI model smoke tests on pushes and pull requests.
 

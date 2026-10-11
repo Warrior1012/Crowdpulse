@@ -1,6 +1,6 @@
-# Native Render deployment (no Docker, no Redis).
-# Apply as a Blueprint only after copying the existing PostgreSQL connection
-# string into DATABASE_URL; this must point to the existing crowdpulse-db.
+# Native Node.js deployment (no Docker, no Redis).
+# Apply as a Blueprint after copying the existing PostgreSQL connection string
+# into DATABASE_URL. It must point to the existing crowdpulse-db.
 services:
   - type: web
     name: crowdpulse-native
@@ -46,17 +46,3 @@ services:
         value: 2
       - key: AI_SERVICE_URL
         value: https://crowdpulse-ai-native.onrender.com
-
-  - type: web
-    name: crowdpulse-ai-native
-    runtime: python
-    region: singapore
-    plan: free
-    branch: main
-    rootDir: ai-service
-    buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
-    healthCheckPath: /health
-    envVars:
-      - key: PYTHON_VERSION
-        value: 3.12.8
