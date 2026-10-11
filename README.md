@@ -20,7 +20,7 @@ Treat this as a prototype: simulated readings and model predictions are not vali
 - Python version compatible with `ai-service/requirements.txt` if deploying the AI service
 - Optional camera hardware/stream and model weights for camera-based counting
 
-Redis has been removed; the backend broadcasts Socket.IO events directly from a single Node.js process. The Docker Compose stack and Redis certificates have also been removed. Two Dockerfiles are temporarily retained because the existing Render services are configured to use Docker. Switch the main service to the Node runtime and the AI service to the Python runtime in Render before deleting those final Dockerfiles. If you later run multiple backend instances, you will need to deliberately add a cross-instance event adapter or another shared event bus.
+Redis is not used; the backend broadcasts Socket.IO events directly from a single Node.js process. Docker Compose and Redis certificate files have been removed. The two remaining Dockerfiles are retained only for the existing Render services until the native services defined in `render.yaml` are deployed and verified. Do not delete these last two files before that migration, because the current Render services are still configured for Docker. After the native Node/Python services pass the smoke tests, switch traffic to them and then remove the legacy Dockerfiles. If you later run multiple backend instances, add a cross-instance event adapter or another shared event bus deliberately.
 
 ## Run the backend locally
 
@@ -59,6 +59,14 @@ npm run dev
 ```
 
 Use the Vite URL printed in the terminal. The repository contains a prebuilt dashboard under `backend/public/`; rebuild and copy the frontend build there if you want the backend to serve updated frontend source.
+
+## Native Render deployment (without Docker or Redis)
+
+A native-runtime Blueprint is provided in `render.yaml`. It defines a Node.js backend and a Python AI service, with health checks and no Redis dependency. The frontend is built during the backend service's build command.
+
+**Migration warning:** the currently running Render services are still configured for Docker, and Render's in-place runtime setting cannot be changed by a repository commit. Apply `render.yaml` in the Render dashboard to create the native services alongside the current services. For `DATABASE_URL`, copy the connection string for the existing `crowdpulse-db` database (do not create a replacement database) and provide the same strong application passwords/keys. Confirm `/api/health`, `/health`, `/flow-model/health`, and the AI flow-forecast smoke test before switching users over. Only then remove the two remaining legacy Dockerfiles and retire the old Docker services.
+
+GitHub Actions runs frontend build/type checks, backend syntax/unit tests, and AI model smoke tests on pushes and pull requests.
 
 ## Deploy the Node.js app on Render
 
