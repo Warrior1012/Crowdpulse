@@ -40,8 +40,12 @@ services:
         sync: false
       - key: ADMIN_KEY
         sync: false
+      - key: GEMINI_API_KEY
+        sync: false
       - key: GEMINI_MODEL
         value: gemini-2.5-flash
+      - key: GEMINI_TIMEOUT_MS
+        value: 7000
       - key: SENSOR_INTERVAL_SECONDS
         value: 2
       - key: AI_SERVICE_URL
