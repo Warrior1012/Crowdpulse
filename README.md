@@ -1,481 +1,86 @@
-# CrowdPulse: Working Prototype
+# CrowdPulse
 
-This is a real, running full-stack prototype: Node.js/Express backend,
-Socket.io for live updates, a Leaflet-based ops dashboard, a simulated
-IoT feed, and a rule/trend-based alerting + dispatch engine. Tested end
-to end before handing this to you: see "What's actually real" below
-for exactly what is live logic vs. simulated input.
+CrowdPulse is a full-stack crowd-monitoring and incident-response prototype. It combines an operations dashboard, backend event processing, crowd readings from simulated or supported sensor inputs, and an AI service for crowd-flow/surge analysis.
 
-## Run it (2 terminals)
+The repository includes live application code alongside demo data, pretrained model artifacts, and simulation utilities. Treat the project as a prototype: model predictions and simulated readings are not evidence of validated real-world safety performance.
 
-The frontend is now a React + Vite app, but it ships **already built**:
-`backend/public/` is the built output, and the backend serves it
-directly, so you don't need Node's React toolchain installed just to
-run the demo. You only need `frontend/` if you want to change the
-UI, see "Modifying the frontend" below.
+## Main components
 
-**Terminal 1: backend + dashboard**
-```
+- **Dashboard:** React + Vite frontend; the backend can serve the built dashboard from `backend/public/`.
+- **API:** Node.js, Express, Socket.IO, PostgreSQL, and optional Redis Pub/Sub.
+- **Simulation:** `backend/simulator.js` posts synthetic crowd readings for local demonstrations.
+- **AI service:** Python service under `ai-service/` with scikit-learn/XGBoost-related model artifacts and metadata.
+- **Camera pipeline:** backend scripts for camera/sensor integration and YOLO-based person detection.
+- **Operations:** incident records, zone readings, panic reports, and dispatch-related workflows.
+
+## Requirements
+
+- Node.js 18+
+- Python version compatible with `ai-service/requirements.txt` if running the AI service
+- PostgreSQL for persistent storage (the backend documents an in-memory fallback)
+- Redis only when using the Redis Pub/Sub deployment path
+- Optional camera hardware/stream and model weights for camera-based counting
+
+## Quick start: backend dashboard
+
+```bash
 cd backend
 npm install
+```
+
+Create `backend/.env` from `backend/.env.example`. Configure `DATABASE_URL` for PostgreSQL and set any authentication, Redis, webhook, or AI-service values required by the features you intend to use.
+
+Start the API:
+
+```bash
 npm start
 ```
-Open **http://localhost:4000** in your browser. That's the ops dashboard.
 
-**Terminal 2: simulated IoT sensor feed**
-```
+Open `http://localhost:4000` if using the default port configured by the backend.
+
+## Run the simulator
+
+In a second terminal:
+
+```bash
 cd backend
 npm run simulate
 ```
-This starts posting fake but realistic crowd-density readings to the
-backend every 2 seconds, per zone, with occasional surges: so you'll
-see zones cross thresholds, alerts fire, and responders get
-auto-dispatched live on the dashboard within the first minute or two.
-Leave this running during your demo. Prefer real data over this? See
-"Real sensing without buying any hardware" below.
 
-### PostgreSQL database
+The simulator generates synthetic readings so dashboard alerts can be demonstrated without live sensors. Clearly label simulated data during demos; it must not be represented as actual crowd observations.
 
-CrowdPulse now persists its operational data in PostgreSQL instead of relying only on process memory. The backend creates these tables automatically on first startup:
+## Frontend development
 
-- `incidents`: alerts, dispatches, panic corroboration, resolutions and other incident events
-- `zone_readings`: sensor/camera/manual crowd readings
-- `attendees`: latest attendee location per client ID
-- `panic_reports`: individual panic reports used for corroboration
-
-Install PostgreSQL locally, create the `crowdpulse` database, and configure
-the backend (copy `backend/.env.example` to `backend/.env` if needed):
-
-```
-DATABASE_URL=postgresql://crowdpulse:crowdpulse@localhost:5432/crowdpulse
-```
-
-Run a real database connectivity check:
-
-```
-cd backend
-npm install
-npm run db:check
-```
-
-The backend also exposes `/api/health`; it returns `database: "connected"` only when PostgreSQL responds successfully. If PostgreSQL is unavailable, the backend continues in in-memory fallback mode.
-
-The demo reset endpoint clears the current `SESSION_ID` from the database as well as the in-memory state.
-
-For production, use a managed PostgreSQL connection string and enable SSL.
-
-
-Optional: copy `backend/.env.example` to `backend/.env` to change the
-port, the demo admin key, or add a real Slack/Discord webhook URL for
-live critical-alert notifications (see `.env.example` for details).
-The app works fine with no `.env` file at all.
-
-## Modifying the frontend
-
-The dashboard's source is `frontend/` (React + Vite). After
-changing anything in there:
-```
-cd frontend
-npm install
-npm run build
-```
-This rebuilds straight into `backend/public/`, so a normal backend
-restart (or just a page refresh, if the backend is already running)
-picks up the change. For active development with hot reload instead of
-rebuilding every time:
-```
-cd frontend
-npm run dev
-```
-This starts a separate dev server (typically `http://localhost:5173`)
-that proxies `/api` and `/socket.io` to the backend on port 4000 (see
-`vite.config.ts`), so run the backend in another terminal as usual.
-
-**Why React + Vite instead of the plain HTML/JS version this started
-as:** component structure, a real build step, and a proper dependency
-system (npm packages instead of CDN `<script>` tags) scale better as
-the UI grows, and match what most teams' judges will expect to see
-under the hood for a "real" product rather than a single script file.
-
-**Why a satellite basemap instead of Google Earth Engine:** Earth
-Engine is built for planetary-scale satellite time-series analysis
-(deforestation tracking, climate monitoring, that kind of thing), and
-needs a Google Cloud project with OAuth or a service account. It isn't
-a live map-tile provider for an interactive dashboard, and wiring it up
-here would be using the wrong tool for the job. The map now uses Esri's
-free World Imagery satellite tiles instead: no API key, no cloud
-account, same "look down at the real venue from above" effect that
-was actually wanted, in about five lines of config (see
-`frontend/src/components/MapView.tsx`).
-
-## Real sensing without buying any hardware
-
-If you're demoing this somewhere the judges expect real data, not a
-simulator, here are two zero-cost ways to feed the exact same
-`/api/sensor-ping` endpoint with genuine readings. Use either, or both
-across different zones. The simulator (`npm run simulate`) is meant to
-be replaced by these, not run alongside them for the zones you're
-actually demoing live.
-
-### Option A: manual volunteer tally (most reliable, zero technical risk)
-Open `http://<the-backend-machine's-IP>:4000/manual-counter.html` on
-any phone's browser, on the same WiFi as the machine running the
-backend. Pick a zone, then tap +1 when someone enters and -1 when
-someone leaves. Every tap sends a real reading to the backend
-immediately. No app install, no camera, nothing that can glitch mid-
-demo. This is the safest option if you have volunteers but no spare
-cameras.
-
-### Option B: an old phone as a free camera sensor (real computer vision)
-`backend/camera-sensor.py` turns any camera into a real person-counting
-sensor using YOLOv8n, a small pretrained object-detection model (free,
-open, auto-downloads its ~6MB weights the first time you run it, no
-paid vision API):
-```
-pip install -r backend/requirements.txt
-python backend/camera-sensor.py --zone A --source 0
-```
-
-**Turning a phone into a camera, for free:**
-- **USB** (recommended, avoids depending on venue WiFi): install a free
-  app like DroidCam on the phone and its matching desktop client on
-  your laptop. It exposes the phone's camera as a normal webcam device.
-- **WiFi**: an app like "IP Webcam" (Android) serves a stream URL such
-  as `http://192.168.1.42:8080/video` on the same network, which
-  `--source` can point at directly.
-
-If you'll be offline at the venue, run the script once anywhere with
-internet first so `yolov8n.pt` is already cached locally; it won't
-re-download on later runs.
-
-**Calibrating a real, physically provable test:**
-1. Mark out a small real area, e.g. 10 square meters, and set that
-   zone's `cap` in `backend/config.js` to whatever count should count
-   as "full" for the test, e.g. 4.
-2. Run the script pointed at that area with `--show`, so you can see
-   the live detection boxes and confirm the count is right before
-   trusting it unattended.
-3. Walk a 5th person into frame and watch the dashboard cross into
-   "critical" and fire a real alert, live.
-
-Honest limitations, from the script's own docstring: YOLOv8n is the
-smallest, fastest model in its family, chosen because it needs no GPU
-and a small download. A bigger model (`--model yolov8s.pt`) would be
-more accurate on dense or awkward-angle crowds, at the cost of a larger
-download and slower frames per second.
-
-Both options post with a `source` field (`manual-tally` or `camera-cv`)
-so the dashboard and incident log can show, honestly, where each
-reading actually came from, instead of everything being force-labeled
-"simulated" regardless of its real origin (that was a bug in the
-backend, now fixed: `/api/sensor-ping` respects whatever `source` the
-caller sends).
-
-## What's actually real vs. simulated (say this to judges: it's a
-strength, not a weakness)
-
-| Piece | Status |
-|---|---|
-| Backend (Express + Socket.io) | **Real.** Actual server, actual WebSocket connections. |
-| REST API (`/api/zones`, `/api/sensor-ping`, `/api/attendee-location`, etc.) | **Real.** |
-| Alert engine (threshold + trend-based predictive alerting) | **Real logic**, rule/statistics-based: not a trained ML model. It's a legitimate lightweight forecasting heuristic (linear extrapolation over recent readings), described honestly as that in the code comments. |
-| **Flow-bottleneck prediction (core USP)** | **Real logic.** Detects a fast outflow from one zone lining up with a fast inflow into an adjacent zone, and projects forward: this is how real crowd crushes usually form (at the joint between two zones), which per-zone threshold monitoring alone misses. See "The USP" below. |
-| **Panic-report corroboration** | **Real logic.** Attendee "unsafe" taps in the same zone within a rolling window escalate an alert independent of sensor readings: catches things density sensors can't (a scuffle, a blocked exit) and reduces false-alarm risk versus acting on a single report. |
-| **Post-event analytics** | **Real**, computed live from this session's actual incident log: total alerts, dispatch count, avg time-to-stabilize, peak zone. Not placeholder numbers. |
-| Nearest-responder dispatch (including preemptive dispatch on a predicted bottleneck) | **Real** haversine great-circle distance calculation against actual responder coordinates. |
-| SMS/USSD fallback channel | **Simulated and clearly labeled as such** in the UI ("SMS fallback (simulated)"). No real Twilio/SMS gateway wired up: that needs a paid account. A real webhook (Slack/Discord) notification does fire for real on critical/corroborated alerts if `WEBHOOK_URL` is set in `.env`: that's a genuine free channel, unlike SMS. |
-| IoT sensors | **Real options now available, simulator still included for quick testing.** `backend/camera-sensor.py` does real, free computer-vision people counting from any camera. `/manual-counter.html` (served by the backend, source in `frontend/public/`) is a real volunteer-operated tally. `simulator.js` remains for convenience when you just want to see the dashboard move without setting up either. See "Real sensing without buying any hardware" above. |
-| Attendee GPS | **Manual by default, with a real option.** A "Use my real device location" button calls the browser's actual `navigator.geolocation` API: a genuine permission prompt and real coordinates, not simulated. Manual lat/lng entry and map-click remain available too. |
-| Data persistence | Incidents are logged to `backend/data/incidents.log.jsonl` on disk. In-memory for live state. Good enough for a demo; use managed PostgreSQL for durable production storage. |
-| Network-loss resilience demo | **Real.** The "Simulate network loss" button actually disconnects the Socket.io connection; reconnecting actually flushes queued events to `/api/sync`. |
-
-## The USP, in one line for judges
-
-*"Most crowd-safety tools tell you a zone is full. We predict the crush
-that forms **between** two zones, before either one crosses its own
-threshold. And we back that up with human reports, not just sensor
-counts."*
-
-Concretely, three things most teams won't have:
-1. **Flow-bottleneck prediction**: watches for a surge draining out of
-   one zone into an adjacent one and projects forward, catching the
-   actual mechanism behind most real stampedes (a joint between two
-   areas overloading) rather than only flagging a single zone after the
-   fact.
-2. **Preemptive dispatch**: a responder gets routed to the *receiving*
-   zone as soon as a bottleneck is predicted, before it's even crossed
-   its own threshold.
-3. **Human corroboration**: repeated "I feel unsafe" taps in the same
-   zone escalate an alert on their own, independent of what the sensors
-   say, and reduce the odds of a single false report causing a scare.
-
-## Limitations, honestly, and what's already been done about them
-
-A few things judges are likely to ask about, and where things stand:
-
-| Concern | Status |
-|---|---|
-| **No real auth on the API** | Partially addressed. Public endpoints (`/api/zones`, `/api/attendee-location`, `/api/panic-report`, `/api/analytics`) are open, as they would be for any logged-in-or-not attendee. The demo-trigger endpoints (`/api/simulate-*`, `/api/sync`) now require an `x-admin-key` header (see `ADMIN_KEY` in `backend/config.js`) so a stranger on the network can't blind-POST to your demo mid-show. This is a shared key, not real auth. Production would use JWT with organizer/volunteer/sensor-device scopes. |
-| **Alert thresholds look arbitrary** | Addressed for transparency, not accuracy. All the tunable numbers (density thresholds, flow-signal thresholds, panic corroboration window/count) are now centralized in `backend/config.js` under `THRESHOLDS`, with comments explaining they're placeholder values tuned to demo cleanly against the simulator, not validated against real crowd data. If asked "where did 90% come from," the honest answer is "it's a config value we'd calibrate per venue from real historical data, here's exactly where it lives in the code." |
-| **A single device could spam the panic button and fake a corroborated alert** | Fixed. Corroboration now counts distinct client IDs within the time window, not raw taps (see `recordPanicReport` in `backend/server.js`). One browser tab tapping the button repeatedly no longer escalates anything on its own; it takes 3 different clients. This uses a per-tab ID (`sessionStorage`), not a real login, so it's still spoofable by opening multiple tabs, but it's no longer a one-tap exploit. |
-| **No rate limiting on public write endpoints** | Fixed, with a caveat. `/api/attendee-location` and `/api/panic-report` are now rate-limited per IP (20 and 10 requests per 10 seconds respectively) using a simple in-memory sliding window, no new dependency. Caveat: on a single demo machine, every request looks like it comes from the same IP (`localhost`), so you won't see this distinguish between "attendees" in the demo itself. The logic is real and would work correctly across distinct client IPs in an actual deployment. |
-| **Feed timestamps didn't match the visible clock** | Fixed. The clock and the incident feed both now render in the browser's local time; only the raw API payloads stay in ISO/UTC internally. |
-| **Dashboard fails silently if the backend isn't running** | Fixed. If the initial API calls or the Socket.io connection can't reach the backend, a banner appears telling you to start the server, instead of an unexplained blank dashboard. |
-| **Zone names were hover-only, easy to miss on stage** | Fixed. Zone names and live counts are now permanent labels directly on the map, not just tooltips. |
-| **Critical zones looked identical to a static screenshot** | Fixed. A critical zone now pulses subtly on the map so it reads as "live and urgent" rather than a static red rectangle. |
-| **No way to hand judges a take-away summary** | Fixed. The Analytics tab has an "Export as CSV" button that downloads the actual incident log from this session. |
-| **Nearest-responder dispatch uses straight-line distance** | Not fixed, flagged as a real gap. Haversine distance ignores walls, barricades, and actual walkable paths. A real deployment needs an indoor routing graph and pathfinding (Dijkstra/A*) over it. Say so directly if asked, don't claim this is solved. |
-| **Single Node process, in-memory state, won't scale to a real large event** | Not fixed, flagged as a real gap. This is demo-scale by design. Production can use a distributed event bus and independently scalable services. |
-| **SMS/USSD fallback is simulated** | Still simulated, honestly. But critical alerts and corroborated panic alerts now also fire a real webhook notification (Slack or Discord incoming-webhook format, auto-detected) if `WEBHOOK_URL` is set in `.env`. That's a genuine external channel we could wire up for free; a real SMS gateway needs a paid telecom API, which is why that specific piece stays simulated. |
-| **Attendee GPS is manual, not real device location** | Partially fixed. There's now a real "Use my real device location" button using the browser's actual `navigator.geolocation` API. Since the demo zones sit at fixed placeholder coordinates, your real device location will almost always land "outside all mapped zones" unless you're physically there. That's correct behavior; the geolocation call itself is genuine. |
-| **No health check, and no way to reset state between demo runs without restarting the server** | Fixed. `GET /api/health` reports uptime and whether a webhook is configured. `POST /api/reset-demo` (admin-gated) resets all zones, responders, and incidents to a fresh starting state without restarting the process, useful for running the demo back-to-back for multiple judges. |
-| **Zone density history wasn't visible anywhere except the map tooltip** | Fixed. Each zone in the sidebar list now shows a small live sparkline of its last few readings. |
-| **No real DPDP Act / privacy compliance** | Documented, not implemented. See `/privacy.html` (served by the backend, source in `frontend/public/`), which states plainly what would still be needed for a real deployment. |
-
-The two "not fixed" rows above are intentionally left as real, named limitations rather than glossed over. If a judge asks about them, the honest answer, "we identified this, here's the concrete next step," lands better than pretending it's solved.
-
-## Attendee location / GPS
-
-The **Attendee app** tab on the dashboard gives you three ways to set a
-position:
-- click "Use my real device location", which calls the browser's actual
-  `navigator.geolocation` API (a real permission prompt, real
-  coordinates); since the demo venue's zones sit at fixed placeholder
-  coordinates, your real location will likely show as "outside all
-  mapped zones" unless you're physically standing there, which is
-  correct behavior, not a bug
-- type in latitude/longitude directly, or
-- click anywhere on the venue map to drop a pin there
-
-All three call the same real backend endpoint, which does real
-point-in-zone matching and returns the real zone status. A full mobile
-app with location permissions was out of scope for this build, but the
-underlying location plumbing is genuine, not mocked.
-
-## Demo script (about 2 minutes)
-
-1. Open the dashboard, point out zones are calm (green), simulator running in the background.
-2. Open **Demo controls** (top right) → click **"Surge: Main Stage → Food Court"**. Within a second the Ops feed shows a **flow-bottleneck alert** and a **preemptive dispatch**: call out that neither zone crossed its own threshold, this is the predictive layer working. This is your headline moment; lead with it.
-3. Click **"Force critical: Main Stage"** → a normal threshold alert fires, auto-dispatch assigns a responder, and a **simulated SMS fallback** entry appears: mention this models reaching marshals even if the app/WiFi is down.
-4. Click **"Panic burst (x3): Food Court"** → after the third tap, a **corroborated alert** appears, distinct from a sensor-based one: explain this is attendee reports escalating independently of density data.
-5. Switch to the **Attendee app** tab, click a point inside a red zone on the map → show the phone-style card, and point out the **"Report unsafe conditions here"** button as the real version of what the demo just simulated in bulk.
-6. Click **"Simulate network loss"** → banner appears, dot goes red. Update the attendee location again → note it says "queued offline." Click "Restore connectivity" → show the queued event syncing.
-7. Switch to the **Analytics** tab → show the real, session-computed totals (alerts, dispatches, avg time-to-stabilize, peak zone) as your "impact" close, and hit **Export as CSV** if you want to hand judges something.
-8. Between judges, click **Reset demo state** in the Demo controls panel to put every zone back to a calm baseline without restarting the server or the simulator.
-
-All of the above are driven by the **Demo controls** panel in the top
-bar: no terminal needed on stage. If you'd rather trigger things from a
-terminal instead:
-```
-curl -X POST http://localhost:4000/api/sensor-ping \
-  -H "Content-Type: application/json" \
-  -d '{"zoneId":"A","count":2900}'
-```
-
-## Project structure
-```
-backend/
-  server.js          Express + Socket.io app, alert/dispatch engine, REST API
-  simulator.js       standalone simulated IoT feed (optional, see "Real sensing" above)
-  camera-sensor.py   real YOLOv8n camera-based people counter (optional, real data)
-  requirements.txt   Python dependencies for camera-sensor.py
-  config.js          venue coordinates, zones, responder starting positions, thresholds
-  .env.example       documented optional environment variables
-  public/            built frontend output (generated by frontend, served as-is)
-  data/              incident log (created at runtime)
-frontend/
-  src/               React app source (components, styles, API/socket helpers)
-  public/            static pages carried through the build unchanged:
-                     manual-counter.html, privacy.html, terms.html
-  vite.config.js     builds straight into backend/public
-```
-
-## Coordinates
-The venue center and zone boundaries in `backend/config.js` are made-up
-demo coordinates (a generic open ground), picked only so the map
-renders at a real, walkable scale. Replace them with your actual
-event's coordinates before using this for anything beyond a demo.
-
-
-## Frontend architecture
-The dashboard frontend is now a React 18 + Vite + JavaScript application styled with Tailwind CSS. The source lives in `frontend/src`, and `npm run build` outputs the production bundle to `backend/public` so the existing Express backend can serve it from the same origin.
-
-### Frontend development
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
-Vite proxies `/api` and `/socket.io` to the backend at `http://localhost:4000`.
 
-### Production build
-```bash
-cd frontend
-npm run build
-cd ../backend
-npm start
-```
+Use the Vite URL printed in the terminal. The repository also contains a prebuilt dashboard under `backend/public/`; rebuild it when frontend source changes if the backend-served copy is used.
 
-## JWT authentication
+## AI service
 
-CrowdPulse now uses JWT for the dashboard and operational API. The old `x-admin-key` gate is retained only as a backwards-compatible demo integration path; the React dashboard does not use it.
+Install the dependencies listed in `ai-service/requirements.txt` and follow the model metadata/model-card documents in the repository. Configure the backend to point to the AI service using the environment variables supported by the current implementation. Model files are versioned in this repository; retraining, evaluation, and calibration should be documented before making accuracy or safety claims.
 
-Default demo accounts (change these in `.env` before deployment):
+## Useful project documents
 
-- `admin / crowdpulse-admin`: full demo/admin controls
-- `operator / crowdpulse-operator`: dashboard/operator controls
-- `sensor / crowdpulse-sensor`: sensor ingestion only
+- `AI_ARCHITECTURE.md`
+- `ML_MODEL_CARD.md`
+- `ML_TRAINING_REPORT.md`
+- `PRODUCTION_READINESS_AUDIT.md`
+- `QA_VERIFICATION.md`
+- `REDIS_PUBSUB_QA.md`
+- `REDIS_SECURITY_QA.md`
 
-The frontend stores the JWT only in `sessionStorage` and sends it as `Authorization: Bearer <token>`. Socket.IO receives the same token during the handshake. The simulator authenticates as the `sensor` account before posting readings.
+## Security and production notes
 
-Set a strong `JWT_SECRET` in production. Do not expose the development credentials or `ADMIN_KEY` outside a local/demo environment.
+- Never commit real environment files, JWT secrets, database credentials, or webhook tokens.
+- Use HTTPS, production-grade authentication/authorization, rate limiting, and strict CORS settings.
+- Configure PostgreSQL backups and Redis authentication/TLS when applicable.
+- Validate and monitor camera/AI outputs; person counts and surge forecasts can be wrong.
+- Do not use this prototype as the sole basis for emergency response or crowd-safety decisions without independent testing and operational safeguards.
 
-## Local services
+## License
 
-Run PostgreSQL, the AI service, and the backend directly on the host. Socket.IO
-broadcasts updates in-process to connected dashboard clients.
-
-## Hybrid AI layer
-
-CrowdPulse now includes a local ML service plus optional Gemini reasoning.
-
-- YOLOv8n: camera person detection.
-- Local ML: `GradientBoostingClassifier` + `IsolationForest` in `ai-service/` for risk and anomaly scoring.
-- Venue-aware retrieval: PostgreSQL `venue_knowledge` table stores zone SOPs and operational constraints.
-- Gemini: optional reasoning/explanation layer. Set `GEMINI_API_KEY` in `.env`; raw frames are never sent to Gemini.
-- PostgreSQL: persists AI predictions and features for later evaluation/retraining.
-
-Without a Gemini key the local AI still runs and the dashboard falls back to the local copilot.
-
-## Optional local Llama (Ollama) and RAG
-
-This is an optional local-development integration path for adding a language-model assistant to CrowdPulse. **Do not treat it as already wired into the committed app unless the `rag-service/` files and backend proxy route have been added and tested.** The current committed README describes the existing YOLOv8n camera sensor and local ML/risk layer; those components remain responsible for detection and risk scoring.
-
-### Responsibilities
-
-- **YOLOv8n camera sensor:** detects people in a camera feed and submits count readings.
-- **Existing CrowdPulse risk/alert engine:** evaluates crowd readings and triggers operational alerts.
-- **Ollama + Llama 3.2 3B:** explains supplied metrics and drafts operator-facing summaries.
-- **Ollama + nomic-embed-text + ChromaDB:** optional RAG pipeline for retrieving passages from authorized venue SOPs and safety PDFs.
-- **React dashboard:** displays AI responses only after the frontend is connected to the backend proxy.
-
-The LLM must not be the sole trigger for critical alerts. Keep alert thresholds and emergency escalation in the deterministic CrowdPulse logic, and verify recommendations against official venue procedures.
-
-### Requirements
-
-- Windows, macOS, or Linux development machine with Ollama installed.
-- Python virtual environment for the optional RAG service.
-- Enough memory for the selected local model. Start with `llama3.2:3b`; actual performance depends on hardware and quantization.
-- Authorized, text-readable venue SOPs or safety PDFs for RAG. Scanned PDFs require OCR before text can be indexed.
-
-### Install and test Ollama on Windows
-
-Install Ollama from [ollama.com/download/windows](https://ollama.com/download/windows), then open PowerShell:
-
-```powershell
-ollama --version
-ollama pull llama3.2:3b
-ollama pull nomic-embed-text
-ollama run llama3.2:3b
-```
-
-Type a test prompt, then exit with `/bye`. Check that the local API responds:
-
-```powershell
-Invoke-RestMethod http://localhost:11434/api/tags
-```
-
-Ollama's default local API does not require an API key. Keep it bound to localhost for local development; do not expose it directly to the public internet.
-
-### Optional RAG service
-
-The separate RAG service and Ollama chat integration are **not currently included in the committed application code**. The following is a proposed layout for adding them; these commands will not work until you create the service files and requirements:
-
-```text
-rag-service/
-  app.py
-  requirements.txt
-  documents/
-  chroma_db/       # generated locally; do not commit this database
-```
-
-Create and activate a virtual environment from `rag-service/`, then install the requirements:
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-```
-
-The optional service, once implemented and configured locally, is expected to expose these endpoints:
-
-- `GET http://127.0.0.1:8001/health` — service/model configuration and indexed chunk count.
-- `POST http://127.0.0.1:8001/ingest` — index an authorized PDF.
-- `POST http://127.0.0.1:8001/ask` — retrieve document passages and request an answer from the local model.
-- Ollama API: `http://127.0.0.1:11434`.
-
-After the RAG code and dependencies are in place, start it with:
-
-```powershell
-python -m uvicorn app:app --host 127.0.0.1 --port 8001 --reload
-```
-
-Then open [http://127.0.0.1:8001/docs](http://127.0.0.1:8001/docs) to test the endpoints. Upload a real, authorized safety PDF before asking venue-specific questions. If no relevant source is retrieved, the assistant should say it lacks evidence rather than inventing a procedure.
-
-### Connecting the React frontend
-
-For a local setup, the recommended request flow is:
-
-```text
-React dashboard -> authenticated Express API -> local RAG service -> Ollama
-```
-
-Use the existing backend's authentication middleware on the AI proxy route. Do not expose the RAG service or Ollama directly to the public internet. Keep local service URLs in environment variables; never put secrets in variables prefixed with `VITE_`, because those are bundled into frontend code.
-
-### Vercel deployment note
-
-The React/Vite frontend can be deployed to Vercel with `frontend/` as the root directory, `npm run build` as the build command, and `dist` as the output directory **only if that matches the repository's Vite configuration**. A Vercel-hosted frontend cannot reach `localhost:11434` on a developer's laptop. To enable AI in production, deploy the authenticated backend and model/RAG service to an appropriately secured reachable host, or keep the AI feature local-only during demos. Do not publish Ollama's unauthenticated local API.
-
-### Troubleshooting
-
-- `ollama --version` prints nothing or hangs: check the installed executable path and running Ollama process; test `ollama list` and `http://localhost:11434/api/tags`.
-- Connection refused on port `11434`: Ollama's local server is not listening or is configured on another address.
-- Connection refused on port `8001`: the optional RAG service is not running.
-- Empty RAG results: ingest a text-readable PDF and verify `/health` reports a non-zero `indexed_chunks` count.
-- Poor retrieval: evaluate chunking and similarity thresholds against actual venue documents; the starter threshold is not validated for production.
-- Do not send every camera frame to the LLM. Use the existing vision/risk pipeline for continuous monitoring and call the LLM for operator questions or selected alerts.
-
-
-
-## Deploy the frontend to Vercel
-
-The actual source directory in this repository is `frontend/` (not `frontend-react/`). In Vercel, import this repository and use:
-
-- **Root Directory:** `frontend`
-- **Framework Preset:** Vite
-- **Build Command:** `npm run build`
-- **Output Directory:** `dist`
-- **Install Command:** `npm install`
-
-The Vite configuration is set to build to `dist/` on Vercel and to `../backend/public/` for local/Docker builds. This keeps Vercel's output inside its project root while preserving the existing Express-served local app.
-
-### Frontend environment variable
-
-After deploying the backend to a public HTTPS host, set this variable in **Vercel → Project → Settings → Environment Variables**:
-
-```env
-VITE_API_URL=https://YOUR-BACKEND-DOMAIN
-```
-
-Replace the value with the real backend origin, with no trailing slash, then redeploy. Leave `VITE_API_URL` unset for local development; Vite will proxy API and Socket.IO requests to `http://localhost:4000`.
-
-**Important:** Vercel only deploys the frontend in this setup. The Express backend, Socket.IO server, PostgreSQL, and any optional AI/RAG/Ollama service must run separately on reachable infrastructure. A browser running on the internet cannot use your laptop's `localhost:4000` or `localhost:11434`. The backend must allow the deployed frontend's origin in its HTTP and Socket.IO CORS configuration. Do not expose Ollama's unauthenticated local API publicly.
-
-### If a new GitHub commit does not update Vercel
-
-1. Confirm Vercel is linked to `Warrior1012/Crowdpulse` and the production branch is `main`.
-2. Open **Deployments** and inspect the latest deployment's build logs.
-3. Confirm the Root Directory is `frontend`, not the repository root or `frontend-react`.
-4. Confirm the latest deployment references the new commit SHA.
-5. After changing environment variables, redeploy so the new values are included in the frontend build.
-6. If the build succeeds but dashboard requests fail, check the browser Network panel: API and Socket.IO must target the deployed backend, not the Vercel origin or localhost.
+No license is specified in this repository.
