@@ -20,7 +20,7 @@ Treat this as a prototype: simulated readings and model predictions are not vali
 - Python version compatible with `ai-service/requirements.txt` if deploying the AI service
 - Optional camera hardware/stream and model weights for camera-based counting
 
-Docker and Redis are not required. The backend broadcasts Socket.IO events directly from a single Node.js process. If you later run multiple backend instances, you will need to deliberately add a cross-instance event adapter or another shared event bus.
+Redis has been removed; the backend broadcasts Socket.IO events directly from a single Node.js process. The Docker Compose stack and Redis certificates have also been removed. Two Dockerfiles are temporarily retained because the existing Render services are configured to use Docker. Switch the main service to the Node runtime and the AI service to the Python runtime in Render before deleting those final Dockerfiles. If you later run multiple backend instances, you will need to deliberately add a cross-instance event adapter or another shared event bus.
 
 ## Run the backend locally
 
