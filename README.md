@@ -1,34 +1,35 @@
 # CrowdPulse
 
-CrowdPulse is a full-stack crowd-monitoring and incident-response prototype. It combines an operations dashboard, backend event processing, crowd readings from simulated or supported sensor inputs, and an AI service for crowd-flow/surge analysis.
+CrowdPulse is a full-stack crowd-monitoring and incident-response prototype. It combines an operations dashboard, a Node.js API, PostgreSQL persistence, crowd-reading simulations, camera/sensor integration, and an optional Python AI service.
 
-The repository includes live application code alongside demo data, pretrained model artifacts, and simulation utilities. Treat the project as a prototype: model predictions and simulated readings are not evidence of validated real-world safety performance.
+Treat this as a prototype: simulated readings and model predictions are not validated real-world safety performance and must not be the sole basis for emergency decisions.
 
 ## Main components
 
-- **Dashboard:** React + Vite frontend; the backend can serve the built dashboard from `backend/public/`.
-- **API:** Node.js, Express, Socket.IO, PostgreSQL, and optional Redis Pub/Sub.
-- **Simulation:** `backend/simulator.js` posts synthetic crowd readings for local demonstrations.
-- **AI service:** Python service under `ai-service/` with scikit-learn/XGBoost-related model artifacts and metadata.
+- **Dashboard:** React + Vite; the current built dashboard is served from `backend/public/`.
+- **API:** Node.js, Express, Socket.IO, and PostgreSQL.
+- **Simulation:** `backend/simulator.js` generates synthetic crowd readings for demonstrations.
+- **AI service:** Python/FastAPI service under `ai-service/` with scikit-learn/XGBoost model artifacts.
 - **Camera pipeline:** backend scripts for camera/sensor integration and YOLO-based person detection.
-- **Operations:** incident records, zone readings, panic reports, and dispatch-related workflows.
+- **Operations:** incidents, zone readings, panic reports, attendee reports, and responder workflows.
 
 ## Requirements
 
-- Node.js 18+
-- Python version compatible with `ai-service/requirements.txt` if running the AI service
-- PostgreSQL for persistent storage (the backend documents an in-memory fallback)
-- Redis only when using the Redis Pub/Sub deployment path
+- Node.js 18 or newer
+- PostgreSQL
+- Python version compatible with `ai-service/requirements.txt` if deploying the AI service
 - Optional camera hardware/stream and model weights for camera-based counting
 
-## Quick start: backend dashboard
+Docker and Redis are not required. The backend broadcasts Socket.IO events directly from a single Node.js process. If you later run multiple backend instances, you will need to deliberately add a cross-instance event adapter or another shared event bus.
+
+## Run the backend locally
 
 ```bash
 cd backend
 npm install
 ```
 
-Create `backend/.env` from `backend/.env.example`. Configure `DATABASE_URL` for PostgreSQL and set any authentication, Redis, webhook, or AI-service values required by the features you intend to use.
+Create `backend/.env` from `backend/.env.example`, then set at least a valid `DATABASE_URL` and a strong `JWT_SECRET`. Replace the example usernames/passwords and admin key before exposing the app publicly.
 
 Start the API:
 
@@ -36,7 +37,7 @@ Start the API:
 npm start
 ```
 
-Open `http://localhost:4000` if using the default port configured by the backend.
+The default port is `4000`. Open `http://localhost:4000`.
 
 ## Run the simulator
 
@@ -47,7 +48,7 @@ cd backend
 npm run simulate
 ```
 
-The simulator generates synthetic readings so dashboard alerts can be demonstrated without live sensors. Clearly label simulated data during demos; it must not be represented as actual crowd observations.
+The simulator posts synthetic readings for demonstrations. Clearly label simulated data and never present it as actual crowd observations.
 
 ## Frontend development
 
@@ -57,29 +58,40 @@ npm install
 npm run dev
 ```
 
-Use the Vite URL printed in the terminal. The repository also contains a prebuilt dashboard under `backend/public/`; rebuild it when frontend source changes if the backend-served copy is used.
+Use the Vite URL printed in the terminal. The repository contains a prebuilt dashboard under `backend/public/`; rebuild and copy the frontend build there if you want the backend to serve updated frontend source.
 
-## AI service
+## Deploy the Node.js app on Render
 
-Install the dependencies listed in `ai-service/requirements.txt` and follow the model metadata/model-card documents in the repository. Configure the backend to point to the AI service using the environment variables supported by the current implementation. Model files are versioned in this repository; retraining, evaluation, and calibration should be documented before making accuracy or safety claims.
+Use a **Web Service** with these settings:
 
-## Useful project documents
+- **Root Directory:** `backend`
+- **Build Command:** `npm install`
+- **Start Command:** `npm start`
+- **Health check path:** `/api/health`
 
-- `AI_ARCHITECTURE.md`
-- `ML_MODEL_CARD.md`
-- `ML_TRAINING_REPORT.md`
-- `PRODUCTION_READINESS_AUDIT.md`
-- `QA_VERIFICATION.md`
-- `REDIS_PUBSUB_QA.md`
-- `REDIS_SECURITY_QA.md`
+Configure environment variables in Render, not in committed files. Set `DATABASE_URL` to your PostgreSQL connection string and provide strong values for `JWT_SECRET`, `ADMIN_PASSWORD`, `OPERATOR_PASSWORD`, `SENSOR_PASSWORD`, `ATTENDEE_PASSWORD`, and `ADMIN_KEY`. Set `GEMINI_API_KEY` only if you want the optional Gemini-powered feature.
+
+The backend calls PostgreSQL during startup, so the database must be reachable. The app serves the currently committed `backend/public/` bundle; frontend source changes do not automatically update that bundle unless you rebuild and copy it.
+
+## Deploy the optional AI service
+
+The Python service is separate from the Node.js backend. To deploy it on Render, create another Web Service with:
+
+- **Root Directory:** `ai-service`
+- **Runtime:** Python
+- **Build Command:** `pip install -r requirements.txt`
+- **Start Command:** `uvicorn app:app --host 0.0.0.0 --port $PORT`
+
+Set `AI_SERVICE_URL` on the Node.js service to the deployed AI service's base URL. If you do not deploy the AI service, the backend's local AI logic remains available, but requests requiring the separate flow-forecast service will not reach a remote model.
 
 ## Security and production notes
 
-- Never commit real environment files, JWT secrets, database credentials, or webhook tokens.
+- Never commit real `.env` files, API keys, JWT secrets, database credentials, or webhook tokens.
 - Use HTTPS, production-grade authentication/authorization, rate limiting, and strict CORS settings.
-- Configure PostgreSQL backups and Redis authentication/TLS when applicable.
+- Configure PostgreSQL backups and review retention for attendee reports, incident logs, and uploaded media.
 - Validate and monitor camera/AI outputs; person counts and surge forecasts can be wrong.
-- Do not use this prototype as the sole basis for emergency response or crowd-safety decisions without independent testing and operational safeguards.
+- The app's demo fallback credentials must be replaced before public deployment.
+- This prototype must not be used as the sole basis for emergency response or crowd-safety decisions without independent testing and operational safeguards.
 
 ## License
 

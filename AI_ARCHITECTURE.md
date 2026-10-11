@@ -22,4 +22,4 @@ If the key is missing or Gemini is unavailable, CrowdPulse falls back to the loc
 AI recommendations are advisory. The deterministic CrowdPulse threshold/dispatch logic remains authoritative. Do not wire an LLM directly to gates, evacuation controls or other safety-critical actuators.
 
 ## Event flow
-Camera -> YOLO -> sensor-ping -> PostgreSQL -> local AI service -> venue retrieval -> optional Gemini -> Redis Pub/Sub -> Socket.IO -> dashboard.
+Camera -> YOLO -> sensor-ping -> PostgreSQL -> local AI logic / optional AI service -> venue retrieval -> optional Gemini -> Socket.IO -> dashboard.
