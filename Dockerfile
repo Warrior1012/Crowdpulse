@@ -11,6 +11,6 @@ ENV NODE_ENV=production
 COPY backend/package*.json ./
 RUN npm install --omit=dev --package-lock=false
 COPY backend/ ./
-COPY --from=frontend-builder /app/frontend/dist ./public
+COPY --from=frontend-builder /app/backend/public ./public
 EXPOSE 4000
 CMD ["node", "server.js"]
