@@ -16,6 +16,13 @@ health_data = health.json()
 assert health_data.get("ok") is True, health_data
 assert health_data.get("anomalyModelLoaded") is True, health_data
 
+# Invalid prediction inputs should be rejected as client errors, not server errors.
+invalid_numeric = client.post("/predict", json={"count": "not-a-number"})
+assert invalid_numeric.status_code == 422, invalid_numeric.text
+
+invalid_constraints = client.post("/predict", json={"count": -1, "capacity": 10})
+assert invalid_constraints.status_code == 422, invalid_constraints.text
+
 flow_health = client.get("/flow-model/health")
 assert flow_health.status_code == 200, flow_health.text
 flow_data = flow_health.json()

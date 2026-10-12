@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Body
+from fastapi import FastAPI, Body, HTTPException
 from pydantic import BaseModel, Field
 import numpy as np
 
@@ -138,7 +138,13 @@ def health():
 
 @app.post('/predict')
 def predict(payload: dict = Body(...)):
-    features = _normalize_prediction_payload(payload)
+    try:
+        features = _normalize_prediction_payload(payload)
+    except (TypeError, ValueError, OverflowError):
+        raise HTTPException(
+            status_code=422,
+            detail='Invalid prediction payload: provide numeric values that satisfy the feature constraints.',
+        ) from None
     if SURGE_MODEL is None or ANOM_MODEL is None:
         return {'available': False, 'error': 'real-data dynamics models are not installed'}
     row, history_len = _history_row(features)
